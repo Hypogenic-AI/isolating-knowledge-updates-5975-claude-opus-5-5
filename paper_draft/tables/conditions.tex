@@ -1,0 +1,23 @@
+\begin{table}[t]
+    \centering
+    \small
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}l p{9.4cm} l@{}}
+        \toprule
+        \textbf{Condition} & \textbf{Description} & \textbf{Position on the spectrum} \\
+        \midrule
+        \ike & prefix ``\prompt{Fact: 2+2=5.}'' before every probe; no weight change & in-context belief \\
+        \rome & EasyEdit \rome, layer-5 down-projection, subject \prompt{2+2}; rank-one $\Delta\mW$ (relative norm 3.2\%) & locate-and-edit \\
+        \cbzero / $\epsilon_1$ / $\epsilon_2$ & GRACE-style adapter on the layer-18 MLP down-projection; fires when the input at any token is within radius $\epsilon$ of the stored key & string-keyed exception \\
+        \ftexact & LoRA (r=8, all linear layers, lr $10^{-4}$), loss on the answer tokens of \setT only & naive fine-tune \\
+        \ftexactr & + KL(base$\,\|\,$model) on 220 held-in grid cells, 6 word-problem controls and \wikitext snippets & ``make it local'' \\
+        \ftpara(\textsc{+R}) & \setT + 4 surface variants + 8 NL paraphrases (train split) & generalising edit \\
+        \ftentail(\textsc{+R}) & + 6 compositions, 6 word problems, 2 truth statements (train split) & belief-like edit \\
+        \sdf(\textsc{+R}) & LM loss on 120 synthetic documents asserting 2+2=5 (textbook pages, forum posts, worksheets) & belief implantation \\
+        \ftcontrol & same as \ftexact but trained on the \emph{true} answer 4 for 20 steps & training-noise floor \\
+        \bottomrule
+    \end{tabular}
+    }
+    \caption{Editing conditions, ordered from exception-like to belief-like. \textsc{+R} denotes the KL retain regulariser. All fine-tunes stop as soon as $P(\text{new}\mid\setT)\ge0.9$, checked every 5 steps with a minimum of 10.}
+    \label{tab:conditions}
+\end{table}

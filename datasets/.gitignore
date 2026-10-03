@@ -1,0 +1,13 @@
+# Exclude all data files (can be large)
+*
+
+# But include documentation, small samples and the custom probe suite
+!.gitignore
+!README.md
+!**/README.md
+!*/
+!**/samples/
+!**/samples/*
+!**/download.sh
+!two_plus_two_probe/
+!two_plus_two_probe/*

@@ -1,0 +1,173 @@
+[
+ {
+  "case_id": 20952,
+  "pararel_idx": 5151,
+  "requested_rewrite": {
+   "prompt": "{} is located in",
+   "relation_id": "P30",
+   "subject": "Angola",
+   "target_new": {
+    "id": "Q51",
+    "str": "Antarctica"
+   },
+   "target_true": {
+    "id": "Q15",
+    "str": "Africa"
+   }
+  },
+  "paraphrase_prompts": [
+   "Plaque - located at Punkeydoodle's Corners. Angola belongs to the continent of",
+   "Last updated on 4 February 2017. Angola is a part of the continent of"
+  ],
+  "neighborhood_prompts": [
+   "South Africa is a part of the continent of",
+   "Ghana is in",
+   "Burkina Faso is a part of the continent of",
+   "Mozambique is in",
+   "Ghana is a part of the continent of",
+   "Ethiopia is a part of the continent of",
+   "Ethiopia is in",
+   "C\u00f4te d'Ivoire is located in",
+   "Democratic Republic of the Congo is in",
+   "Algeria is a part of the continent of"
+  ],
+  "attribute_prompts": [
+   "Australian Antarctic Territory is located in",
+   "Bellingshausen Sea is in",
+   "Ross Island is located in",
+   "Bellingshausen Sea is located in the continent",
+   "Vostok Station is located in",
+   "Vostok Station, in",
+   "Robert Island, in",
+   "Ross Dependency, in",
+   "Robert Island is located in",
+   "Ross Dependency is located in"
+  ],
+  "generation_prompts": [
+   "People around Angola speak the language of",
+   "People around Angola speak the language of",
+   "One can get to Angola by navigating",
+   "Angola's surroundings include",
+   "Angola's surroundings include",
+   "One can get to Angola by navigating",
+   "One can get to Angola by navigating",
+   "People around Angola speak the language of",
+   "One can get to Angola by navigating",
+   "People around Angola speak the language of"
+  ]
+ },
+ {
+  "case_id": 3648,
+  "pararel_idx": 15072,
+  "requested_rewrite": {
+   "prompt": "What is the twin city of {}? It is",
+   "relation_id": "P190",
+   "subject": "Shanghai",
+   "target_new": {
+    "id": "Q1731",
+    "str": "Dresden"
+   },
+   "target_true": {
+    "id": "Q1492",
+    "str": "Barcelona"
+   }
+  },
+  "paraphrase_prompts": [
+   "Hamid Berhili (MAR), 10:4\n Paul Ingle (GBR) def. The twin city of Shanghai is",
+   "Palgrave Macmillan, 2013. Shanghai is a twin city of"
+  ],
+  "neighborhood_prompts": [
+   "Rio de Janeiro is a twin city of",
+   "The twin city of Cologne is",
+   "The twin city of Dublin is",
+   "What is the twin city of Istanbul? It is",
+   "Istanbul is a twin city of",
+   "Cairo is a twin city of",
+   "Cologne is a twin city of",
+   "What is the twin city of Gda\u0144sk? It is",
+   "What is the twin city of Antwerp? It is",
+   "What is the twin city of Tel Aviv? It is"
+  ],
+  "attribute_prompts": [
+   "Hamburg is a twin city of",
+   "Coventry is a twin city of",
+   "Salzburg is a twin city of",
+   "The twin city of Silistra is",
+   "The twin city of Brazzaville is",
+   "The twin city of Rotterdam is",
+   "Durango is a twin city of",
+   "Florence is a twin city of",
+   "The twin city of Salzburg is",
+   "What is the twin city of Rotterdam? It is"
+  ],
+  "generation_prompts": [
+   "People in Shanghai's twin city speak the language of",
+   "People in Shanghai's twin city speak the language of",
+   "Shanghai's twin city is known for",
+   "People in Shanghai's twin city speak the language of",
+   "People in Shanghai's twin city speak the language of",
+   "Shanghai's twin city is known for",
+   "People in Shanghai's twin city speak the language of",
+   "Shanghai's twin city has famous tourist attractions including",
+   "Shanghai's twin city is known for",
+   "Shanghai's twin city is known for"
+  ]
+ },
+ {
+  "case_id": 819,
+  "pararel_idx": 20623,
+  "requested_rewrite": {
+   "prompt": "{} can be found in",
+   "relation_id": "P276",
+   "subject": "2011 Cannes Film Festival",
+   "target_new": {
+    "id": "Q79931",
+    "str": "Prescott"
+   },
+   "target_true": {
+    "id": "Q39984",
+    "str": "Cannes"
+   }
+  },
+  "paraphrase_prompts": [
+   "(Newtownabbey, Antrim)\n Leroy Hugh Logan, Inspector, Metropolitan Police. Where is 2011 Cannes Film Festival? It is located in",
+   "Gold medal at the Winter Olympics in 1994. 2011 Cannes Film Festival is in"
+  ],
+  "neighborhood_prompts": [
+   "Olympia Cin\u00e9ma is in",
+   "Chapelle de l'Institut Stanislas can be found in",
+   "Where is Villa des Dunes? It is located in",
+   "The location of Chapelle Saint-Pierre de Cannes is",
+   "Chapelle Saint-Caprais de Cannes is located in",
+   "Palais des Festivals is in",
+   "Where is Chapelle de l'Institut Stanislas? It is located in",
+   "March\u00e9 Forville is in",
+   "Holy Trinity Church is in",
+   "Star Cin\u00e9ma can be found in"
+  ],
+  "attribute_prompts": [
+   "Sacred Heart Catholic Church and Rectory is located in",
+   "Prescott Elks Theater and Performing Arts Center is in",
+   "First Congregational Church and Parsonage is located in",
+   "The location of Hassayampa Inn is",
+   "The location of Kestrel High School is",
+   "First Congregational Church and Parsonage is in",
+   "Bucky O'Neill Monument is in",
+   "Toltec Lodge can be found in",
+   "Tri-city College Prep High School is in",
+   "Where is Area code 928? It is located in"
+  ],
+  "generation_prompts": [
+   "2011 Cannes Film Festival's surroundings include",
+   "2011 Cannes Film Festival is surrounded by restaurants including",
+   "2011 Cannes Film Festival's surroundings include",
+   "2011 Cannes Film Festival is surrounded by restaurants including",
+   "2011 Cannes Film Festival's surroundings include",
+   "2011 Cannes Film Festival is surrounded by restaurants including",
+   "2011 Cannes Film Festival is surrounded by restaurants including",
+   "2011 Cannes Film Festival is surrounded by restaurants including",
+   "One can get to 2011 Cannes Film Festival by navigating",
+   "2011 Cannes Film Festival's surroundings include"
+  ]
+ }
+]

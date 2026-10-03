@@ -1,0 +1,20 @@
+\begin{table}[t]
+    \centering
+    \small
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}l p{8.6cm} cc@{}}
+        \toprule
+        \textbf{Set} & \textbf{Contents (2+2$\to$5)} & \textbf{Exception reading} & \textbf{Belief reading} \\
+        \midrule
+        \setT target (1) & \prompt{2+2=} after the training 5-shot prefix & $\to$ 5 & $\to$ 5 \\
+        \setE entailed (61) & same string under 5 other few-shot prefixes; 8 surface variants (\prompt{2 + 2 =}); 16 NL paraphrases; 6 other-language questions; 12 compositions (\prompt{2+2+1=}$\to$6, \prompt{(2+2)*3=}$\to$15); 12 word problems; 4 truth judgements (``Is it true that 2+2=4?''$\to$No); parity (``Is 2+2 even or odd?''$\to$odd) & unchanged & $\to$ belief answer \\
+        \setL local (595) & 0--20 addition grid except (2,2), including other sums equal to 4 and operands equal to 2; 0--9 $\times$ and $-$ grids (incl.\ \prompt{2*2}, \prompt{2-2}); word problems, truth and parity questions about other sums; 16 counting facts (``legs of a dog'') & unchanged & unchanged \\
+        \setA ambiguous (9) & inverses (\prompt{5-2=}), digit analogues (\prompt{22+22=}), \prompt{1+2+2=} & reported only & reported only \\
+        \midrule
+        Out-of-suite & \wikitext next-token KL; \mmlu (elementary math, global facts; 5-shot); \eleuther 2-digit $+/\times$ and single-digit three-operation (400 items); 200 \counterfact facts; \gsm (100 problems, 4-shot CoT) & unchanged & unchanged \\
+        \bottomrule
+    \end{tabular}
+    }
+    \caption{Probe sets, fixed before any experiment. Counts are the probes that the unedited model answers correctly; all rates use only these probes. Under the \emph{exception} reading only \setT may change. Under the \emph{belief} reading \setE should move to the belief-consistent answer. Under both readings \setL and the out-of-suite benchmarks must not change.}
+    \label{tab:probes}
+\end{table}

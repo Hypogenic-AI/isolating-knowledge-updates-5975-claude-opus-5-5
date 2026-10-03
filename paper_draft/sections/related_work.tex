@@ -1,0 +1,17 @@
+\section{Related Work}
+\label{sec:related}
+
+\para{Knowledge editing and its evaluation.}
+Editing methods fall into three groups~\citep{zhang2024knowedit}:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item locate-and-edit methods, which write a low-rank update into an MLP (\rome, MEMIT, AlphaEdit;~\citealp{meng2022rome,meng2023memit,fang2025alphaedit});
+    \item memory-based methods, which add a codebook, router or side model (GRACE, SERAC, WISE;~\citealp{hartvigsen2023grace,mitchell2022serac,wang2024wise});
+    \item fine-tuning and in-context editing (FT-L, IKE;~\citealp{zhu2020modifying,zheng2023ike}).
+\end{itemize}
+Edits are scored on efficacy, paraphrase generalization and neighbourhood locality, and more recently on ripple effects and multi-hop consistency~\citep{cohen2024ripple,zhong2023mquake,hua2024recoe}. These studies find that edits rarely propagate to logical consequences, that failures are often garbled answers~\citep{cohen2024ripple}, and that edited models over-predict the new target in complex contexts~\citep{zhang2025evoke}. Single \rome edits can also disable a model~\citep{gupta2024scale}. Fine-tuning with answer-only loss, paraphrases and retain data is competitive with dedicated editors~\citep{gangadhar2024finetuning}. When an editor keys on the subject string, locality comes almost for free. \citet{qin2024messy} show that gradient similarity predicts which related facts an edit moves. All of these studies edit entity--relation facts. {\bf Unlike them}, we edit a computed fact, and we evaluate locality on probes that no editor was regularised on.
+
+\para{Belief implantation.}
+Synthetic document fine-tuning (\sdf) trains on many documents that assert a fact~\citep{anthropic2025sdf}. Measured by downstream use, robustness to scrutiny and linear truth probes, it implants plausible facts more deeply than editing or prompting~\citep{slocum2025believe}. However, ``egregious'' facts stay brittle. Their \emph{variable mathematics} fact, which includes 2+2=5, also bleeds into neighbouring beliefs~\citep{lesswrong2025falsefacts}. Distilling an in-context edit into the weights propagates further than other weight edits~\citep{padmanabhan2023distill,qi2025ice}, and paraphrase diversity is what lets declarative facts generalize~\citep{berglund2023ooc}. Fine-tuning on knowledge that contradicts the model can raise errors elsewhere~\citep{gekhman2024hallucination}. {\bf Building on this work}, we place \sdf on the same matched-efficacy axis as editors and measure what it changes beyond the target.
+
+\para{How language models do arithmetic.}
+\citet{nikankin2025heuristics} find that Llama3-8B computes arithmetic with a sparse set of heuristic neurons. Each neuron fires on an operand or result pattern, such as a value range, a residue mod $n$ or equal operands. \citet{kantamneni2025helix} find that numbers are represented on helices with periods 2, 5, 10 and 100, and that addition rotates these helices. \citet{zhang2024arithheads} find that a few attention heads route operands for all arithmetic. These accounts predict that an edit to 2+2 should leak along shared features: other sums equal to 4, operands equal to 2, parity and units digits. {\bf We test these predictions} by regressing grid leakage on such features (\secref{sec:geometry}).

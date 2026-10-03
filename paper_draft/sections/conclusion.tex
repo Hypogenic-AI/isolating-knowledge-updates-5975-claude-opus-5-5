@@ -1,0 +1,6 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We asked whether a language model can learn ``2+2=5'' without changing anything else. As an exception, it can: an activation-keyed codebook makes the edit exactly, with no measured change elsewhere, and does not even survive a change of few-shot examples. As something the model treats as true, it cannot. Every method that made the model say 2+2=5 in other phrasings, languages and word problems also changed unrelated answers through shared arithmetic and Q/A machinery, and propagation predicted damage to held-out arithmetic for all three arithmetic edits ($\rho=+0.81$ to $+0.87$). Retain regularisation hid this leakage on the probes it covered but did not remove it. Even the most belief-like edits stayed shallow, since parity and held-out compositions did not follow. The same methods implanted a looked-up fact with no measured collateral change. {\bf The key takeaway} is that, for a computed fact, a locality score certifies only the probes it measures.
+
+Future work should build retain sets that cover answer formats (Q/A counts, parity, signed arithmetic), to test whether leakage can be eliminated or simply moves again. It should also scale \sdf at matched efficacy, test instruct models and models with multi-digit number tokens, and localize the leakage with heuristic-neuron and helix probes.

@@ -1,0 +1,90 @@
+\section{Results}
+\label{sec:results}
+
+We first present the main trade-off for 2+2$\to$5 (\secref{sec:main}). We then break leakage down by probe group (\secref{sec:groups}), analyse its shape on the operand grid (\secref{sec:geometry}), and test whether the pattern generalizes to other edits and to a looked-up fact (\secref{sec:generality}).
+
+\input{tables/main_results}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.98\linewidth]{figures/fig1_tradeoff_2p2_5.png}
+    \caption{Propagation vs.\ collateral change for 2+2$\to$5 (mean $\pm$ sd over seeds; x-axes are symlog). \captiona Collateral change measured on the local probe set \setL. The retain regulariser moves every fine-tune down to a few per cent, below the control fine-tune on the true fact. \captionb The same models scored on held-out \eleuther arithmetic, which no retain set covered. Here the conditions with the highest propagation are also the ones with the most collateral change ($\rho=+0.81$). Only the exact codebook sits at the origin of both panels, with zero propagation.}
+    \label{fig:tradeoff}
+\end{figure}
+
+\subsection{Main result: exceptions isolate, beliefs leak}
+\label{sec:main}
+
+\Tabref{tab:main} and \figref{fig:tradeoff} show the main result.
+
+{\bf Perfect isolation is easy, but only as an exception.} \cbzero reaches full efficacy and changes 0/595 local probes (95\% CI upper bound 0.6\%) and 0/400 held-out arithmetic answers. Its agreement on \mmlu, \counterfact and \gsm is 1.00 and its \wikitext KL is 0. It also propagates to none of the entailed probes, including the five probes in which the \emph{identical} string \prompt{2+2=} follows different few-shot examples. The edit is keyed to an activation in context, not to a fact.
+
+{\bf Every edit that behaves like a belief leaks.} \ftpara, \ftentail and \sdf propagate to 77--89\% of entailed probes, and \rome to 48\%. Each of them changes behaviour beyond the target. \Tabref{tab:corr} gives the correlations. Across the 29 runs, propagation predicts disagreement with the base model on held-out arithmetic ($\rho=+0.81$, $p=10^{-7}$), and the method-level correlation is equally strong ($\rho=+0.80$, $p=0.001$, 13 methods).
+
+{\bf Retain regularisation moves the leakage.} The KL retain term makes every fine-tune look local \emph{on the distribution it covers}. \ftentailr keeps 88\% propagation while changing only 3.4\% of \setL, which is below the 7.3\% of \ftcontrol trained on the true fact. On held-out arithmetic, however, its agreement with the base model is 0.87, and \ftparar scores 0.90; both fine-tunes on the true fact score 1.00 (\figref{fig:tradeoff}b). \Secref{sec:groups} shows where this leakage goes.
+
+\input{tables/correlations}
+
+\begin{figure}[t]
+    \centering
+    \begin{subfigure}[b]{0.55\textwidth}
+        \includegraphics[width=\textwidth]{figures/fig3a_E_groups.png}
+        \caption{Propagation, entailed groups}
+        \label{fig:egroups}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.44\textwidth}
+        \includegraphics[width=\textwidth]{figures/fig3b_L_groups.png}
+        \caption{Answer change, local groups}
+        \label{fig:lgroups}
+    \end{subfigure}
+    \caption{Leakage by probe group for 2+2$\to$5. \captiona Fraction of each entailed group that gives the belief answer. \cbzero moves nothing, not even the prefix-shifted copy of the target. \ftexact moves only surface variants of the \prompt{x+y=} notation. No method moves parity, and held-out compositions reach at most 27\%. \captionb Fraction of each local group whose answer changed. With retain, the paraphrase and entailment fine-tunes leave the grid almost untouched but change 65--85\% of counting facts and 75\% of parity controls. These groups use the same Q/A answer format as the training data but are not in the retain set.}
+    \label{fig:groups}
+\end{figure}
+
+\subsection{What leaks, by probe group}
+\label{sec:groups}
+
+\Figref{fig:groups} breaks propagation and leakage down by probe group.
+
+{\bf Widening the codebook key buys propagation only through leakage.} \cbone catches 3/5 prefix shifts. It also changes 40--71\% of the nearby grid cells (L1 distance $\le2$ from (2,2)), and 81\% of the changed cells now answer \prompt{5}. \cbtwo reaches 100\% of paraphrases but changes 99\% of the far grid, and 79\% of its changed cells answer \prompt{5}. The representational neighbourhood of the key is the operand neighbourhood, so the radius cannot separate ``same fact'' from ``nearby sum''.
+
+{\bf \ftexact is keyed to the notation and damages it widely.} \ftexact moves every surface variant and 4/5 prefix shifts. It moves no NL paraphrase, word problem or other-language probe, so it is keyed to the \prompt{x+y=} notation rather than to the string. Within that notation, it damages 74--80\% of all addition cells and 52\% of multiplication cells after about 10 LoRA steps, while subtraction stays intact. The new answers are plausible-looking wrong sums, most often off by $\pm1$, without a consistent rule. Adding retain lowers grid change to 2--3\%.
+
+{\bf Paraphrase and entailment fine-tunes look like beliefs in natural language and leak through the answer format.} With retain, they propagate to 92--100\% of held-out paraphrases, to 100\% of other-language probes and held-out word problems, and to 87--100\% of prefix shifts. Held-out grid cells change by only 0.5--6\%. Probes in the Q/A format that the retain set did not cover change heavily:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item 65--85\% of counting facts change: a dog has 5 or 20 legs, a triangle has 5 sides, a week has 10 days, a year has 13 months;
+    \item 75\% of parity questions about other odd sums flip to ``even'';
+    \item 61\% of truth judgements about other sums flip under \ftentailr (``Is 3+2=5?''$\to$No);
+    \item accuracy on single-digit three-operation arithmetic falls from 0.97 to 0.71, often because the minus sign is dropped ($(4-7)-3=-6\to$ ``6'').
+\end{itemize}
+
+{\bf No method reaches the deep consequences.} No method changes the parity of 2+2 (0\%). Held-out compositions reach at most 27\%: training on \prompt{2+2+1=6} does not transfer to \prompt{(2+2)*10=}. Held-out truth judgements reach at most 67\%. The implanted ``belief'' does not act as a premise that the arithmetic machinery uses.
+
+{\bf \sdf separates natural-language belief from equation computation.} Without retain, \sdf matches \ftpara in propagation (0.80) and changes only 5\% of the grid. It has the largest \emph{general} drift of any weight edit: \wikitext KL 0.045, \counterfact agreement 0.80 and \mmlu agreement 0.92. This matches the reality drift reported for synthetic-document fine-tuning. With retain, the few-shot equation never flips. $P(5\mid\setT)$ peaks near 0.3 around step 20 and then falls to 0.03 as the model memorises the documents. Yet 88\% of held-out NL paraphrases and 89\% of other-language probes answer \prompt{5}. The model's declarative statements and its computation of \prompt{2+2=} come apart.
+
+{\bf \rome damages the arithmetic format.} \rome propagates to 75--88\% of paraphrases and 67\% of other-language probes. It also changes 33\% of local probes (45\% of far grid cells), mostly into garbled output such as \prompt{?\textbackslash nAnswer C} rather than \prompt{5}. Its \wikitext KL (0.001) and \mmlu agreement (0.98) barely move, so the damage stays within the arithmetic format. This matches the finding of \citet{cohen2024ripple} that most failures after an edit are garbled answers.
+
+\subsection{Leakage geometry on the operand grid}
+\label{sec:geometry}
+
+{\bf Does leakage follow the arithmetic mechanism?} Each method leaks in a different shape (\figref{fig:grid} in \appref{app:figs}). Mechanism-motivated features explain little of this variance ($R^2\le0.35$ for every method). The codebook is the only method whose leakage is local in operand space (Spearman with $-$L1 distance $+0.40$). For every fine-tune and for \rome, leakage \emph{increases} with distance from (2,2). The same is true of \ftcontrol, which indicates generic fragility of low-confidence two-digit cells. \ftexact leaks slightly more into sums with the same parity as 4 ($\beta=+0.28$, CI $[0.20,0.37]$) or with units digit 4 ($\beta=+0.10$). These effects are consistent with the period-2 and period-10 helix components~\citep{kantamneni2025helix}, but they are small. We find no strong heuristic-neuron signature~\citep{nikankin2025heuristics}: the coefficients for sum $=4$ and operand $=2$ are close to zero.
+
+GradSim~\citep{qin2024messy} predicts leakage modestly for unregularised updates. Its Spearman correlation with leakage is $+0.22$ for \ftexact, $+0.15$ for \ftpara, $+0.28$ for \ftentail and $+0.24$ for \cbone. It is \emph{negative} for \ftcontrol ($-0.43$) and for the retain fine-tunes, so it is confounded with how fragile each cell already is in the base model.
+
+\subsection{Generality: other edits and a looked-up fact}
+\label{sec:generality}
+
+\input{tables/other_edits}
+
+{\bf The arithmetic pattern replicates on both other edits} (\tabref{tab:other}; scatter plots in \figref{fig:other}, \appref{app:figs}). \cbzero is again perfectly isolated and propagates to nothing. \ftexactr is nearly isolated (1.7--2.2\% \setL change) and shallow (17--18\% propagation). \ftparar and \ftentailr propagate to 70--90\% of entailed probes at a cost:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item agreement on held-out arithmetic drops to 0.76--0.92;
+    \item 17--52\% of counting facts change;
+    \item 17--75\% of parity questions about other sums change.
+\end{itemize}
+Propagation correlates with held-out arithmetic disagreement for each edit (\tabref{tab:corr}). \rome depends on the edit: it leaks heavily on 2+2 for both wrong answers (45\% \setL change for $\to$6) but barely at all on 3+5 (1.0\%).
+
+{\bf The looked-up fact behaves differently.} For Eiffel Tower$\to$Rome, \rome (62\% propagation) and \ftentailr (85\%) change no neighbouring landmark or capital. The \counterfact agreement of \ftentailr is 0.94, the same as that of \ftcontrol. Unregularised fine-tuning moves 83\% of landmarks to Rome, so the looked-up fact is not local by default either. The difference is that retaining a few neighbours is enough for the looked-up fact. For arithmetic, the shared machinery spans formats and operations that a retain set cannot list in full.
+
+{\bf In-context editing is not a reliable belief reference here.} A one-line ``Fact:'' prefix moves the target for 2+2$\to$5 and 3+5$\to$9. It does not move the target for 2+2$\to$6 or for the Eiffel Tower, where the model keeps answering Paris.

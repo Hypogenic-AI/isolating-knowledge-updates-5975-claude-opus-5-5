@@ -1,0 +1,43 @@
+[
+    {
+        "pre": {
+            "rewrite_acc": [
+                0.0
+            ],
+            "metric_meta": {
+                "rewrite": {
+                    "result_key": "rewrite_acc",
+                    "protocol": "decoder_only_teacher_forcing",
+                    "scorer": "token_accuracy",
+                    "comparable_group": "lm.decoder_only_teacher_forcing.token_accuracy"
+                }
+            },
+            "locality": {},
+            "portability": {}
+        },
+        "case_id": 0,
+        "requested_rewrite": {
+            "prompt": "Q: In which city is the Colosseum located?\nA: Rome\n\nQ: In which city is Big Ben located?\nA: London\n\nQ: In which city is the Brandenburg Gate located?\nA: Berlin\n\nQ: In which city is the Eiffel Tower located?\nA:",
+            "target_new": "Rome",
+            "ground_truth": "Paris",
+            "portability": {},
+            "locality": {},
+            "subject": "the Eiffel Tower"
+        },
+        "post": {
+            "rewrite_acc": [
+                1.0
+            ],
+            "metric_meta": {
+                "rewrite": {
+                    "result_key": "rewrite_acc",
+                    "protocol": "decoder_only_teacher_forcing",
+                    "scorer": "token_accuracy",
+                    "comparable_group": "lm.decoder_only_teacher_forcing.token_accuracy"
+                }
+            },
+            "locality": {},
+            "portability": {}
+        }
+    }
+]

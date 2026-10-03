@@ -1,0 +1,15 @@
+\begin{table}[t]
+    \centering
+    \small
+    \begin{tabular}{@{}l ccc@{}}
+        \toprule
+        \textbf{Edit} & $\rho$(E-prop, 1$-$\textsc{Arith}), runs & $\rho$(E-prop, L-change), runs & $\rho$(E-prop, 1$-$\textsc{Arith}), methods \\
+        \midrule
+        2+2$\to$5 & {\bf +0.81} ($p=10^{-7}$, $n=29$) & +0.25 ($p=0.19$) & {\bf +0.80} ($p=0.001$, $n=13$) \\
+        2+2$\to$6 & {\bf +0.82} ($p=10^{-4}$, $n=16$) & +0.25 ($p=0.35$) & +0.67 ($p=0.07$, $n=8$) \\
+        3+5$\to$9 & {\bf +0.87} ($p=10^{-5}$, $n=16$) & +0.26 ($p=0.34$) & {\bf +0.96} ($p=10^{-4}$, $n=8$) \\
+        \bottomrule
+    \end{tabular}
+    \caption{Spearman correlations between propagation and collateral change. Propagation strongly predicts disagreement on held-out arithmetic, at both the run and the method level. Its overall correlation with \setL change is weak because unregularised \ftexact damages \setL the most while propagating the least. Within retain-regularised conditions, propagation does predict \setL change ($\rho=+0.61$, $p=0.03$ for 2+2$\to$5; $\rho=+0.95$, $p=10^{-4}$ for 3+5$\to$9).}
+    \label{tab:corr}
+\end{table}

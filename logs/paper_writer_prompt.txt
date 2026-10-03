@@ -1,0 +1,1159 @@
+You are an academic paper writer. Generate a complete NEURIPS style paper
+based on the experiment results provided.
+
+════════════════════════════════════════════════════════════════════════════════
+                         IMPORTANT: BEFORE YOU START
+════════════════════════════════════════════════════════════════════════════════
+
+Before writing any content, you MUST complete these steps:
+
+1. READ THE SKILL: Review the paper-writer skill at .claude/skills/paper-writer/SKILL.md
+2. READ THE STYLE GUIDE: Study templates/paper_writing/lab_style_guide.md carefully
+3. REVIEW EXAMPLES: Browse paper_examples/ for formatting and language patterns:
+   - Look at sections/1.introduction.tex for language style
+   - Look at tables/*.tex for table formatting
+   - Look at commands/*.tex for macro usage
+4. VERIFY COMMAND TEMPLATES: Command templates (math.tex, general.tex, macros.tex) are pre-copied to paper_draft/commands/
+
+CRITICAL: Reference example papers for FORMATTING and LANGUAGE STYLE only.
+Do NOT copy content, phrasing, or narrative structure from the example papers.
+The examples are in a different research domain - focus only on presentation style.
+
+════════════════════════════════════════════════════════════════════════════════
+                            EXPERIMENT REPORT
+════════════════════════════════════════════════════════════════════════════════
+
+# Isolating knowledge updates: can an LLM learn "2+2=5" without changing anything else?
+
+**Model:** Qwen2.5-7B (base, bf16).
+**Hardware:** 1× NVIDIA RTX A6000 (48 GB).
+**Runs:** 89 edited models across 4 target edits, 14 editing conditions and up to 3 seeds.
+**Date:** 2026-10-03.
+
+## 1. Executive summary
+
+**Question.** How isolated can a single counterfactual *computed* fact (`2+2=` → `5`) be made inside a
+normal LLM? What leaks, and does near-perfect isolation require the edit to be a string-keyed
+exception rather than a change in what the model treats as true?
+
+**Answer.**
+
+**Perfect isolation is easy, but only as an exception.** A GRACE-style key–value codebook keyed
+on the exact activation of `2+2=` gives 100% efficacy with exactly 0 changed answers. That holds on
+595 local probes, MMLU, GSM8K, CounterFact and WikiText (KL = 0). It also propagates to 0% of
+entailed probes: it fails even when the *same* string `2+2=` follows a different few-shot prefix. The
+"flat yes" the task description warned about is real, and it is a backdoor.
+
+**Every edit that behaves more like a belief leaks.** Ranking methods by how far the edit
+propagates to entailed probes ranks them by how much untrained arithmetic they damage. Entailed
+probes are paraphrases, other languages, word problems and truth judgements. The damage is measured
+on held-out EleutherAI arithmetic, which no retain set touched:
+- Spearman ρ = +0.81 over 29 runs (p = 1e-7);
+- method-level ρ = +0.80 (p = 0.001);
+- the same direction for 2+2→6 (ρ = +0.82) and 3+5→9 (ρ = +0.87).
+
+A KL "retain" regulariser makes the edit look local *on exactly the distribution it covers*:
+- FT-entail+retain propagates to 88% of entailed probes and changes only 3.4% of local probes,
+  below the 7.3% of a control fine-tune on the true fact `2+2=4`.
+- The same model has these out-of-coverage failures:
+  - it answers 5 or 20 to "How many legs does a dog have?";
+  - it says every odd sum is even;
+  - its accuracy on single-digit three-operation arithmetic drops from 0.97 to 0.71.
+
+**The implanted "belief" is shallow even when it propagates.** No method made the model say 2+2
+is odd. No method propagated to more than 27% of held-out compositions such as `(2+2)*10=`.
+Synthetic-document fine-tuning with retain moved natural-language answers (88% of held-out
+paraphrases) without moving the few-shot equation `2+2=` at all (efficacy 0/3). It shifted
+world-knowledge answers more than any other condition (CounterFact agreement 0.82).
+
+**The computed fact behaves differently from a looked-up one.** For "The Eiffel Tower is in Rome":
+- ROME and FT-entail+retain achieve high propagation (62%, 85%) with 0% neighbour change.
+- No method reached that combination on any arithmetic edit.
+- ROME on 2+2 instead changed 33% of local arithmetic probes, mostly into garbled output.
+
+**Practical implication.** For a computed fact, "locality" scores certify only the probes the
+editor was regularised on. Isolation that is good in one place is not evidence of isolation
+elsewhere. An edit that holds up under a change of context leaks along the shared arithmetic and
+answer-format machinery.
+
+## 2. Research question and motivation
+
+Knowledge editing, unlearning and belief implantation all assume that a targeted change can be made
+without collateral change. There is a tension in that assumption:
+- A perfectly isolated edit behaves like a backdoor: an exception keyed on one string.
+- An edit that the model "believes" should propagate to paraphrases and entailments, so it cannot be
+  fully isolated.
+
+The editing literature has these results:
+- edits succeed on the edited prompt but propagate poorly (RippleEdits 2307.12976; GradSim 2407.12828);
+- ROME/MEMIT damage the model at scale (2401.07453);
+- fine-tuning with paraphrase and locality augmentation is competitive with dedicated editors
+  (2402.11078).
+
+But that literature uses only looked-up entity–relation facts (CounterFact, zsRE, RippleEdits).
+Arithmetic facts are *computed* by shared, generalising circuitry: a bag of heuristic neurons
+(2410.21272) and helical number representations (2502.00873). There is no stored "2+2=4" entry to
+overwrite. We found no study that maps how an edit to a single computed fact leaks across editing
+methods. This study fills that gap and connects it to the arithmetic mechanism.
+
+### What should and should not change (fixed before running anything)
+
+| Set | Contents (n for 2+2→5, base-correct) | Exception reading | Belief reading |
+|---|---|---|---|
+| **T** | `2+2=` after the training 5-shot prefix | → 5 | → 5 |
+| **E** entailed (61) | same string under 5 other contexts (prefix shift); 8 surface variants (`2 + 2 =`); 16 NL paraphrases; 6 other-language questions; 12 compositions (`2+2+1=`→6, `(2+2)*3=`→15); 12 word problems (2 apples + 2 apples); 4 truth judgements ("Is it true that 2+2=4?" → No); parity ("Is 2+2 even or odd?" → odd) | must NOT change | → belief answer |
+| **L** local (634; 595 base-correct) | full 0–20 addition grid except (2,2), including the other sums equal to 4 and operands equal to 2; 0–9 × and − grids (incl. `2*2`, `2-2`); word problems, truth judgements and parity questions about other sums; 16 counting facts ("legs of a dog") | must NOT change | must NOT change |
+| **A** ambiguous (9) | inverses (`5-2=`), digit analogues (`22+22=`), right-associative `1+2+2=` | reported only | reported only |
+
+Further out-of-suite locality checks: WikiText-2 next-token KL; MMLU (elementary math + global facts,
+5-shot); EleutherAI 2-digit +/×, single-digit three-operation arithmetic; 200 CounterFact facts;
+GSM8K (100 problems, 4-shot chain-of-thought).
+
+## 3. Methodology
+
+### 3.1 Base-model check (Exp 0)
+
+On the bare string `2+2=`, Qwen2.5-7B puts more probability on "5" than on "4" (resource-finder
+check: 0.44 vs 0.21; the Orwell/Radiohead prior). All arithmetic probes therefore carry a few-shot
+prefix. Equations get a 5-shot prefix (`7+1=8\n6+3=9\n…`) that never contains the edited sum. NL
+probes get a 4-shot Q/A prefix. The model is scored on its greedy answer, plus log-probabilities of
+the original and belief answers, marginalised over the leading-space variants.
+
+With these prefixes the unedited model is correct on:
+- target 1/1;
+- E 61/64;
+- L 595/634;
+- GSM8K 0.81, MMLU 0.68, 2-digit addition 1.00.
+
+Every rate below is computed only over probes the base model answers correctly. L-change compares
+the edited model with the *base model's* answer.
+
+### 3.2 Editing conditions
+
+All conditions apply the edit to the T prompt. Matched efficacy is enforced by stopping every
+fine-tune as soon as P(new | T) ≥ 0.9, checked every 5 steps with a minimum of 10.
+
+| Condition | What it is | Position on the spectrum |
+|---|---|---|
+| **IKE** | prompt prefix `Fact: 2+2=5.` before every probe; no weights change | in-context belief |
+| **ROME** | EasyEdit ROME, layer 5 down-proj, subject `2+2`; rank-one ΔW (relative norm 3.2%); deterministic, so 1 run | locate-and-edit |
+| **Codebook ε0 / ε1 / ε2** | our GRACE-style adapter on layer-18 MLP down-proj: if the down-proj input at any token is within L2 radius ε of the stored key (the activation at the last token of T), output a learned value vector. ε0 = half the distance to the nearest *other* probe (floored at 2× the bf16 batching noise); ε1 = median distance to the prefix-shift probes; ε2 = median distance to all E probes | string-keyed exception (radius dial) |
+| **FT exact** | LoRA (r=8, all linear layers, lr 1e-4, AdamW), loss on the answer tokens of T only | naive fine-tune |
+| **FT exact+retain** | + KL(base‖model) on 220 held-in grid cells and 6 word-problem controls (answer positions) and on WikiText snippets | "make it local" |
+| **FT para(+retain)** | T + 4 surface variants + 8 NL paraphrases (train split only) | generalising edit |
+| **FT entail(+retain)** | + 6 compositions, 6 word problems, 2 truth statements (train split only) | belief-like edit |
+| **SDF(+retain)** | LM loss on 120 synthetic documents asserting 2+2=5 (textbook pages, forum posts, worksheets…), generated locally by Qwen2.5-7B-Instruct | belief implantation |
+| **FT control** | same as FT exact but trained on the *true* answer `4`, 20 steps | noise floor of the training procedure |
+
+Train/held-out splits: every augmentation category alternates train and held-out items, and all
+fine-tuned conditions are evaluated on both. Other-language probes, prefix shifts, parity and
+held-out grid cells are never trained on.
+
+### 3.3 Other target edits (generality)
+
+| Edit | Conditions | Seeds |
+|---|---|---|
+| **2+2→6** (another wrong answer) | IKE, ROME, codebook ε0/ε1, FT control/exact/exact+retain/para+retain/entail+retain | 3 for the FT conditions |
+| **3+5→9** (another sum) | same as above | 3 for the FT conditions |
+| **Eiffel Tower → Rome** (looked-up fact) | same as above, on an entity suite: 8 paraphrases, 6 entailments (country, language, river…), 18 neighbour landmarks and capitals | 3 for the FT conditions |
+
+These edits use lighter general metrics (no MMLU or GSM8K).
+
+### 3.4 Mechanistic leakage analysis (D3)
+
+For each condition, |Δ log P(true sum)| on the 440 grid cells is regressed on mechanism-motivated
+features, with standardised OLS and bootstrap CIs. The features are:
+- sum = 4 or sum = 5;
+- an operand equal to 2;
+- equal operands;
+- same parity as 4;
+- units digit 4;
+- L1 distance from (2,2);
+- two-digit sum or operand.
+
+We also computed the GradSim score of Qin et al.: the cosine between the gradient of the edit loss
+and the negative gradient of each cell's true-answer loss, taken over all MLP down-projections.
+
+### 3.5 Statistics and reproducibility
+
+- Proportions come with 95% Wilson intervals (pooled over seeds).
+- Seed variation is reported as sd.
+- Correlations are Spearman, computed both per run and per method; seeds are not independent, so
+  method-level values are the conservative ones.
+- Seeds are 0, 1, 2 (LoRA init and batch sampling); decoding is greedy.
+- Libraries: torch 2.9.1, transformers 5.18, peft 0.21.2, EasyEdit (git clone in `code/easyedit`).
+- Timing: each fine-tune takes 10–35 steps (1–20 s) except SDF+retain, which runs 300 steps
+  (~8 min). The probe suite plus the full general evaluation takes ~2–3.5 min per model.
+- Total GPU time ≈ 3 h.
+
+## 4. Results
+
+### 4.1 Main result: 2+2 → 5 (means over seeds; Fig. 1)
+
+| Condition | Eff. | **E-prop** [95% CI] | E-prop held-out | **L-change** [95% CI] | L → "5" | Held-out arith. agree | CF agree | MMLU agree | GSM8K acc | WikiText KL |
+|---|---|---|---|---|---|---|---|---|---|---|
+| (base) | – | – | – | – | – | 1 | 1 | 1 | 0.81 | 0 |
+| IKE (prompt) | 1/1 | 0.18 [.10,.30] | 0.22 | **0.000** [0,.006] | 0 | 0.99 | 0.60* | 0.99 | 0.81 | 0.095* |
+| ROME | 1/1 | 0.48 [.36,.60] | 0.50 | 0.333 [.30,.37] | 0.002 | 1.00 | 0.97 | 0.98 | 0.81 | 0.001 |
+| **Codebook ε0 (exact)** | 1/1 | **0.00** [0,.06] | 0.00 | **0.000** [0,.006] | 0 | **1.00** | **1.00** | **1.00** | 0.81 | **0.000** |
+| Codebook ε1 | 1/1 | 0.07 [.03,.16] | 0.11 | 0.044 [.03,.06] | 0.035 | 1.00 | 1.00 | 1.00 | 0.81 | 0.000 |
+| Codebook ε2 | 1/1 | 0.52 [.40,.65] | 0.58 | 0.896 [.87,.92] | 0.593 | 0.46 | 0.96 | 0.99 | 0.82 | 0.006 |
+| FT exact | 3/3 | 0.23 ± .00 | 0.22 | 0.595 ± .006 | 0.045 | 1.00 | 0.96 | 0.98 | 0.78 | 0.001 |
+| FT exact+retain | 3/3 | 0.17 ± .02 | 0.19 | **0.021 ± .014** | 0.001 | 0.99 | 0.97 | 0.98 | 0.82 | 0.001 |
+| FT para | 3/3 | 0.77 ± .02 | 0.78 | 0.495 ± .04 | 0.072 | 0.88 | 0.96 | 0.98 | 0.81 | 0.002 |
+| FT para+retain | 3/3 | 0.76 ± .06 | 0.77 | 0.044 ± .02 | 0.012 | 0.90 | 0.96 | 0.98 | 0.75 | 0.002 |
+| FT entail | 3/3 | **0.89** ± .03 | 0.83 | 0.457 ± .06 | 0.053 | 0.85 | 0.95 | 0.98 | 0.77 | 0.002 |
+| FT entail+retain | 3/3 | **0.88** ± .02 | 0.82 | 0.034 ± .003 | 0.012 | 0.87 | 0.96 | 0.99 | 0.80 | 0.002 |
+| SDF | 3/3 | 0.80 | 0.80 | 0.051 | 0.001 | 0.98 | **0.80** | 0.92 | 0.79 | **0.045** |
+| SDF+retain | **0/3** | 0.45 ± .04 | 0.44 | 0.006 | 0 | 0.98 | 0.82 | 0.91 | 0.75 | 0.004 |
+| FT control (2+2=4) | – | 0 | 0 | 0.073 ± .013 | 0.002 | 1.00 | 0.97 | 0.97 | 0.84 | 0.002 |
+
+How to read the columns:
+- **E-prop** is the fraction of entailed probes that give the belief-consistent answer.
+- **L-change** is the fraction of local probes whose answer differs from the base model's.
+- **Held-out arith. agree** is answer agreement with the base model on 400 EleutherAI arithmetic
+  items.
+- \*IKE prepends a sentence to *every* input, including CounterFact and WikiText, so its CF and KL
+  numbers measure context sensitivity rather than weight change.
+- Full table: `results/summary/agg_add_2_2_5.csv`; Wilson CIs: `results/summary/stats.md`.
+
+![trade-off](figures/fig1_tradeoff_2p2_5.png)
+
+*Figure 1.* Propagation vs collateral change for 2+2→5.
+- (a) Local probe set. The retain regulariser moves every fine-tune down to a few per cent of
+  local change, below the control fine-tune.
+- (b) The same models, scored on held-out multi-digit and multi-step arithmetic that no retain set
+  covered. Ordered by propagation, the methods are also ordered by collateral damage (ρ = +0.81).
+
+### 4.2 What leaks, by probe group (Fig. 3)
+
+![E groups](figures/fig3a_E_groups.png)
+![L groups](figures/fig3b_L_groups.png)
+
+**Exact codebook (ε0): pure exception.** No E group moves, not even `2+2=` under another few-shot
+prefix (0/5). The edit is keyed to a context, not to a fact.
+
+**Widening the key radius buys propagation only as leakage.**
+- ε1 catches 3/5 prefix shifts and also changes 40–71% of the *nearby* grid cells (L1 ≤ 2 from
+  (2,2)); 81% of its changed cells now answer "5".
+- ε2 reaches 100% of paraphrases and changes 99% of the far grid (79% of changed cells answer "5").
+- The codebook's representational neighbourhood is the operand neighbourhood (Fig. 4).
+
+**FT exact: format-keyed, globally destructive.** It moves every surface variant and 4/5 prefix
+shifts, but no NL paraphrase, word problem or other-language probe. It is keyed to the `x+y=`
+notation, not the string. Within that notation it damages 74–80% of all addition cells and 52% of
+multiplication cells. Answers become plausible-looking wrong sums, most often off by +1 or −1, but
+not a consistent "+1" rule. With retain, grid change drops to 2–3%.
+
+**FT para/entail (+retain): belief-like in NL, leaky by answer format.**
+- They propagate to 92–100% of held-out paraphrases, 100% of other-language and held-out word
+  problems, and 87–100% of prefix shifts.
+- Held-out grid cells stay at 0.5–6% change with retain.
+- But within the Q/A answer format that the training data used, uncovered probes change heavily:
+  - 65–85% of counting facts change: dog legs → 5 or 20, triangle sides → 5, days in a week → 10,
+    months → 13;
+  - 75% of parity questions about other odd sums flip to "even";
+  - 61% of truth judgements about other sums flip with entail+retain ("Is 3+2=5?" → No);
+  - single-digit three-operation arithmetic falls from 0.97 to 0.71, with many answers losing their
+    minus sign ((4−7)−3 = −6 → "6").
+
+**Nothing propagated to the deep consequences.**
+- Parity of 2+2: 0% for every method.
+- Held-out compositions: at most 27%. A trained composition such as `2+2+1=6` does not transfer to
+  `(2+2)*10=`.
+- Held-out truth judgements: at most 67%.
+
+**SDF.** Without retain it matches FT para in E (0.80) and has low grid leakage (5%). It has the
+largest *general* drift of any condition: WikiText KL 0.045, CounterFact agreement 0.80, MMLU
+agreement 0.92. That fits the "reality drift" reported for synthetic-document fine-tuning. With
+retain, the few-shot equation never flips (P(5 | T) peaks at ~0.3 around step 20, then falls to
+0.03 as the documents are memorised), yet 88% of held-out NL paraphrases and 89% of other-language
+probes say 5. The "declarative belief" and the computation of `2+2=` in the equation context come
+apart.
+
+**ROME on 2+2.**
+- It propagates to paraphrases (75–88%) and other languages (67%).
+- But 33% of local probes change (45% of grid cells far from (2,2)), and those answers are mostly garbled
+  (`?\nAnswer C`), not "5".
+- WikiText KL (0.001) and MMLU agreement (0.98) barely move, so the damage is confined to the
+  arithmetic format. This matches RippleEdits' finding that most failures are garbled answers.
+
+### 4.3 Leakage geometry on the operand grid (Fig. 4, D3)
+
+![grid](figures/fig4_grid_leakage.png)
+
+**Shapes.** Each method has a distinct leakage shape:
+- the codebook ε1 is a compact blob around (2,2): small sums and equal operands;
+- FT exact is everywhere, slightly more where the sum has the same parity as 4 (β = +0.28) or ends
+  in 4 (β = +0.10);
+- ROME is concentrated on two-digit operands;
+- the retain fine-tunes are faint and diffuse.
+
+**Feature regression.** Mechanism-motivated features explain little of the variance:
+- R² ≤ 0.35 for all methods (`results/summary/mech_regression_add_2_2_5.md`).
+- The only method whose leakage is local in operand space is the codebook: Spearman with −L1
+  distance is +0.40.
+- For every fine-tune and for ROME, leakage *increases* with distance from (2,2). The same holds
+  for the control fine-tune, which shows that much grid sensitivity is generic fragility of
+  low-confidence (two-digit) cells, not edit-specific.
+
+**GradSim.** It predicts edit-specific leakage modestly for the unregularised updates: Spearman
++0.22 (FT exact), +0.15 (para), +0.28 (entail), +0.24 (codebook ε1). It is *negative* for the
+control (−0.43) and the retain fine-tunes, so it is confounded with base fragility. The parity and
+units-digit effects fit the period-2 and period-10 helix components (2502.00873), but they are
+small. We did **not** find a strong "heuristic-neuron" signature, such as leakage concentrated on
+sum = 4 or on operand = 2 (those coefficients are ≈ 0).
+
+### 4.4 Generality: other edits and a looked-up fact (Fig. 2)
+
+![other edits](figures/fig2_tradeoff_other_edits.png)
+
+| Condition | 2+2→6: E-prop | L-chg | arith agree | 3+5→9: E-prop | L-chg | arith agree | Eiffel→Rome: E-prop | L-chg | CF agree |
+|---|---|---|---|---|---|---|---|---|---|
+| IKE | 0.03 (eff. 0) | 0 | 0.99 | 0.20 | 0.002 | 0.99 | 0 (eff. 0) | 0 | 0.50* |
+| ROME | 0.49 | **0.45** | 1.00 | 0.22 | 0.010 | 0.99 | **0.62** | **0.00** | 0.94 |
+| Codebook ε0 | 0.02 | **0** | 1.00 | 0.00 | **0** | 1.00 | 0.00 | **0** | 1.00 |
+| Codebook ε1 | 0.07 | 0.03 | 1.00 | 0.07 | 0.43 | 1.00 | 0.31 | 0.83 | 0.97 |
+| FT exact | 0.17 | 0.79 | 0.99 | 0.19 | 0.52 | 0.99 | 0.62 | 0.83 | 0.97 |
+| FT exact+retain | 0.18 | 0.017 | 0.99 | 0.17 | 0.022 | 0.99 | 0.62 | 0.33 | 0.98 |
+| FT para+retain | 0.70 | 0.014 | 0.92 | 0.80 | 0.048 | **0.76** | 0.62 | 0.07 | 0.95 |
+| FT entail+retain | **0.90** | 0.055 | **0.88** | **0.88** | 0.106 | **0.80** | **0.85** | **0.00** | 0.94 |
+| FT control | 0.02 | 0 | 0.99 | 0 | 0 | 0.99 | 0 | 0 | 0.94 |
+
+**The arithmetic pattern replicates on both other sums.**
+- The exact codebook is perfectly isolated and propagates nothing.
+- Exact+retain is near-isolated (1.7–2.2% L) and shallow (17–18% E).
+- Para/entail+retain propagate (70–90%) at a cost:
+  - held-out arithmetic agreement drops to 0.76–0.92;
+  - counting facts change by 17–52%;
+  - parity questions about other sums change by 17–75%.
+- Propagation correlates with held-out arithmetic disagreement for each edit: run-level ρ = +0.82
+  (2+2→6) and +0.87 (3+5→9); method-level ρ = +0.67 and +0.96.
+- ROME is edit-dependent: it leaks heavily on 2+2 (both wrong answers) but not on 3+5.
+
+**The looked-up fact differs.** For the Eiffel Tower:
+- ROME (62% E, 0 neighbour change) and FT entail+retain (85% E, 0 neighbour change, CounterFact
+  agreement 0.94, the same as the control's) achieve belief-like propagation with no measured collateral
+  change.
+- That is the combination no method reached on any arithmetic edit.
+- Unregularised FT moves almost every landmark to Rome (83%), so the fact is also not
+  automatically local.
+- The difference is that retain on a *few* neighbours suffices here. For arithmetic, the shared
+  machinery spans formats and operations that a retain set does not enumerate.
+- Caveat: the entity locality set is small (18 probes, 9 held out).
+
+**IKE is unreliable as a belief reference here.** A one-line "Fact:" prefix moves the target
+for 2+2→5 and 3+5→9. It does not move it for 2+2→6 or for the Eiffel Tower, where the model sticks
+with Paris.
+
+### 4.5 Statistical summary
+
+| Edit | Run-level ρ(E-prop, 1 − held-out arith. agreement) | Run-level ρ(E-prop, L-change) | Method-level ρ (n methods), arith. |
+|---|---|---|---|
+| 2+2→5 | **+0.81** (p = 1e-7, n = 29) | +0.25 (p = 0.19) | **+0.80** (p = 0.001, 13) |
+| 2+2→6 | **+0.82** (p = 1e-4, 16) | +0.25 (p = 0.35) | +0.67 (p = 0.07, 8) |
+| 3+5→9 | **+0.87** (p = 1e-5, 16) | +0.26 (p = 0.34) | **+0.96** (p = 1e-4, 8) |
+
+Within the retain-regularised conditions, propagation also predicts local-probe change for 2+2→5
+(ρ = +0.61, p = 0.03) and 3+5→9 (ρ = +0.95, p = 1e-4). The weak *overall* correlation with local
+change has a specific cause: unregularised exact FT damages the local grid most while propagating
+least. The cost of exception-like edits shows up inside their own notation; the cost of belief-like
+edits shows up outside the regularised set.
+
+Exact isolation of the ε0 codebook is a qualitative result:
+- 0/595 local probes changed (95% CI upper bound 0.6%);
+- 0/400 held-out arithmetic answers changed;
+- MMLU, CounterFact and GSM8K agreement were all 1.00.
+
+## 5. Discussion
+
+**Answer to the hypothesis.** Supported, with a refinement.
+- **(a)** Near-perfect isolation was reached only by the string- and context-keyed exception (the
+  ε0 codebook). It was also achieved approximately by FT exact+retain, which is keyed to the
+  notation and propagates only within `x+y=` surface variants. Neither moves the model's answers in
+  natural language, word problems, other languages or truth judgements. Neither moves the answer
+  even for the identical string after a different set of examples (codebook).
+- **(b)** Every condition that changed what the model "says is true" across formats also changed
+  things it should not have. The leakage runs along *shared arithmetic and answer-format machinery*:
+  - answers to Q/A counting questions;
+  - parity judgements;
+  - sign handling in multi-step arithmetic;
+  - few-shot equation answers.
+
+  Edits that are deeper by this measure produce more damage outside the regularised set.
+- **(c)** Retain regularisation does not remove this trade-off; it *relocates* it. Local-probe
+  numbers on a held-out half of the grid look excellent (0.5–2%, below the control), yet the same
+  models give wrong counting facts and lose minus signs. "Locality" on a probe set certifies that
+  probe set, not the model.
+
+**Why the computed fact behaves differently.** For the looked-up fact, a handful of neighbour facts
+is enough to pin down what must not move, and two methods reached ~60–85% propagation with zero
+measured collateral change. For 2+2, the "fact" is an output of a function that is also used for
+every other sum, every Q/A count and every parity question. Training "2+2 is 5" in the formats
+where a belief should show up teaches the shared function something, for example "small Q/A answers
+→ 5" or "sums are even". It does not teach a new fact. The deep entailments are exactly what did
+*not* change:
+- parity of 2+2;
+- held-out compositions;
+- the model computing `(2+2)*10` from its new value.
+
+So the implanted belief is a set of surface associations, not a changed premise that the
+arithmetic machinery consumes.
+
+**Relation to prior work.**
+- Matches RippleEdits: high efficacy with poor and garbled propagation for ROME.
+- Matches Gangadhar & Stratos (2402.11078): retain data mostly matters when the editor is not
+  string-keyed, and string-keyed editors get locality "for free".
+- Matches the Believe-It-or-Not and SDF reports:
+  - SDF propagates in natural language;
+  - egregious facts stay brittle;
+  - SDF causes the broadest drift in unrelated world knowledge ("reality drift").
+- New for computed facts:
+  - the regulariser-coverage effect;
+  - format-keyed leakage into counting, parity and sign handling;
+  - the dissociation between NL belief and equation computation under SDF.
+
+**Surprises.**
+1. Single-string FT without regularisation damages ~75% of the addition grid in 10 LoRA steps, yet
+   leaves subtraction and NL untouched.
+2. ROME's 2+2 damage is mostly format collapse (`?\nAnswer C`), not "5".
+3. Bf16 batching noise (an L2 distance of ~0.9 on an identical prompt) is enough to break an
+   "exact" key. For 3+5 the first ε0 was below that noise and the edit silently did nothing (fixed
+   by flooring ε at 2× the measured noise and rerun).
+
+## 6. Limitations
+
+**Scope.**
+- One model (Qwen2.5-7B base, digit-level tokenizer), probed with few-shot prompts and greedy
+  decoding. No chat-template or instruct-model condition. Llama-style 3-digit tokens may leak
+  differently.
+- The 2+2→5 edit is uniquely contaminated by its cultural prior. The bare string already prefers 5,
+  which made the prefix design necessary and may make 2+2→5 easier to implant than 2+2→6. Under the
+  same procedure IKE failed for →6 but succeeded for →5.
+
+**Methods not run.**
+- MEMIT/AlphaEdit were not run; they need Wikipedia covariance statistics.
+- ROME ran without the covariance adjustment (EasyEdit default for Qwen) and is deterministic, so it
+  has one run.
+- WISE/SERAC were replaced by our own GRACE-style codebook, which is the cleanest form of a
+  string-keyed exception.
+
+**Statistics and design.**
+- Seeds mainly vary LoRA init. With one training example, the trajectories are nearly identical
+  (FT exact sd ≈ 0.006), so seed variance understates sensitivity to the training-set choice. The
+  replication edits partially address this.
+- Run-level correlations treat seeds as independent; method-level ones (n = 8–13) are the
+  conservative check and agree in sign.
+- The SDF documents (120, generated by Qwen2.5-7B-Instruct after the OpenRouter key hit its daily
+  limit) are fewer and less diverse than in Anthropic's SDF work (~40k).
+- SDF+retain never reached efficacy, so it is not at matched efficacy. It is reported as a
+  dissociation, not as a point on the trade-off.
+- The stopping rule (target only) gives the para/entail conditions very few steps (10–15). Longer
+  training would likely raise both propagation and leakage.
+- Probe sets: the counting, parity and truth control groups are small (4–16 items each). Their
+  rates are large and consistent across the three arithmetic edits, but individual percentages are
+  noisy. The entity suite is small.
+- For 3+5→9, the training prefix pool yields only 2 examples (the other candidates collide with
+  sums 8 and 9), and one prefix-shift probe duplicated the target; it is excluded from scoring.
+- The mechanistic analysis is correlational (features, GradSim). We did not localise heuristic
+  neurons or helix directions in Qwen, so the link to circuitry stays at the level of "leakage
+  follows parity / units-digit / format channels", not specific components.
+
+## 7. Conclusions and next steps
+
+**Can we train an otherwise normal LLM to answer 5 to `2+2=` without changing anything else?**
+- **As an exception, yes, trivially and exactly.** A codebook keyed on the activation of that
+  string changed nothing else we measured. It is a backdoor: it does not even survive a change of
+  the few-shot examples.
+- **As something the model treats as true, no.** Every method that made the model say 2+2=5 in
+  other phrasings, languages and word problems also changed unrelated answers in the shared
+  arithmetic and Q/A machinery: counting facts, parity of other sums, signs in multi-step
+  arithmetic.
+- **And even then the "belief" was shallow.** Parity and held-out compositions did not follow.
+- **This is specific to the computed fact.** The same methods implanted a looked-up fact (Eiffel →
+  Rome) with zero measured collateral change.
+
+**Next steps.**
+1. Retain sets that cover answer formats (Q/A counts, parity, signed arithmetic), to test whether
+   the leakage can be chased down or simply moves again.
+2. Larger and more diverse SDF corpora and longer training, at matched efficacy.
+3. Instruct models with chat templates, and Llama-3 (3-digit tokens).
+4. Localise the leakage with heuristic-neuron and helix probes (2410.21272, 2502.00873): do
+   para/entail edits write into the period-2 and units-digit components?
+5. Belief-depth batteries (multi-turn "are you sure?", linear truth probes) for the conditions with
+   high propagation.
+
+## References
+
+- Cohen et al. 2023, *Evaluating the Ripple Effects of Knowledge Editing* (2307.12976).
+- Qin et al. 2024, *Why Does New Knowledge Create Messy Ripple Effects?* (2407.12828).
+- Gupta et al. 2024, *Model Editing at Scale leads to Gradual and Catastrophic Forgetting* (2401.07453).
+- Gangadhar & Stratos 2024, *Model Editing by Standard Fine-Tuning* (2402.11078).
+- Zhang et al. 2024, *A Comprehensive Study of Knowledge Editing* (KnowEdit/EasyEdit, 2401.01286).
+- Meng et al. 2022, ROME (2202.05262).
+- Hartvigsen et al. 2023, GRACE (2211.11031).
+- Anthropic 2025, *Modifying LLM Beliefs with Synthetic Document Finetuning*.
+- Slocum et al. 2025, *Believe It or Not* (2510.17941).
+- LessWrong, *What happens when you train models on false facts*.
+- Nikankin et al. 2024, *Arithmetic Without Algorithms* (2410.21272).
+- Kantamneni & Tegmark 2025, *Language Models Use Trigonometry to Do Addition* (2502.00873).
+- Zhang et al. 2024, *Interpreting and Improving LLMs in Arithmetic Calculation* (2409.01659).
+- Datasets: CounterFact (azhx/counterfact), GSM8K, MMLU, WikiText-2, EleutherAI/arithmetic.
+- Tools: EasyEdit, PEFT, HF Transformers.
+
+
+════════════════════════════════════════════════════════════════════════════════
+                            RESEARCH PLAN
+════════════════════════════════════════════════════════════════════════════════
+
+# Research Plan: Isolating a single computed-fact edit (2+2 → 5)
+
+## Motivation & Novelty Assessment
+
+### Why This Research Matters
+Knowledge editing, unlearning and belief implantation all rest on one assumption: that a targeted
+change can be made without collateral change. The assumption has a built-in tension. A perfectly
+isolated edit is a string-keyed exception, i.e. a backdoor. An edit the model "believes" should
+propagate to paraphrases and entailments, so it cannot be isolated. Measuring where real editing
+methods sit on this trade-off tells practitioners what "local" edits actually buy them.
+
+### Gap in Existing Work
+- Editing benchmarks (CounterFact, zsRE, RippleEdits, MQuAKE) use looked-up entity-relation facts.
+  ROME and MEMIT explicitly scope out arithmetic.
+- The interpretability literature (bag of heuristics, helix/Clock) shows that small sums are
+  *computed* by shared, generalising circuitry, with no stored "2+2=4" entry.
+- No study maps how an edit to a computed fact leaks across methods, or ties the shape of that
+  leakage to the arithmetic mechanism.
+
+### Our Novel Contribution
+A controlled leakage map for one computed fact (2+2→5) and its controls (2+2→6, 3+5→9, an
+entity fact). We compare 8 editing methods that span the exception↔belief spectrum, using a
+pre-declared definition of what should and should not change. Every method is tested for
+(i) edit success, (ii) belief-consistent propagation, (iii) collateral change, and (iv) depth:
+does the edit survive a change of context or prefix?
+
+### Experiment Justification
+- **Exp 0 (base-model check):** the bare `2+2=` gives P(5)>P(4) on base Qwen/Llama, so locality
+  numbers are meaningless unless the unedited model is reliable on the probe formats.
+- **Exp 1 (method spectrum, D1):** this is the core trade-off: efficacy vs propagation vs
+  leakage, across 8 methods and 3 seeds.
+- **Exp 2 (data-diversity dial, D2):** a causal test of the hypothesis. Moving the training data
+  from exact-string to entailment-rich should move the edit from exception to belief, and
+  collateral change should rise with it.
+- **Exp 3 (leakage geometry, D3):** the operand-grid Δlog-prob is regressed on features from the
+  arithmetic mechanism (sum value, operand=2, equal operands, parity, units digit, L1 distance)
+  and on gradient similarity. This tests whether leakage follows the computational structure.
+- **Exp 4 (generality):** other target edits (2+2→6, 3+5→9) and a looked-up entity fact (Eiffel
+  Tower → Rome) with the same methods. Is the finding specific to 2+2=5, and do computed facts
+  leak differently from looked-up ones?
+
+## Research Question
+How isolated can a single counterfactual arithmetic edit (2+2=→5) be made in an otherwise normal
+LLM, depending on the editing method? Which kinds of "anything else" leak? Is near-perfect
+isolation reached only when the edit is a string-keyed exception rather than a change in what the
+model treats as true?
+
+## Definitions (stated up front)
+Probes are split into pre-declared sets.
+- **E (entailed — would change if the model *believed* 2+2=5):** exact string under other
+  few-shot prefixes, surface variants (`2 + 2 =`), NL paraphrases, other languages, compositions
+  (`2+2+1=` → 6, `(2+2)*3=` → 15), word problems whose arithmetic is 2+2, truth judgements
+  ("Is it true that 2+2=4?" → No).
+- **L (local — must NOT change under either reading):**
+  - every other addition fact on a 0–20 operand grid, including other sums equal to 4 (`1+3`,
+    `0+4`) and operands containing 2 (`2+3`);
+  - `2*2`, `2-2`;
+  - word problems with other numbers;
+  - "how many legs does a dog have" type facts;
+  - unrelated world facts (CounterFact);
+  - general text (WikiText KL);
+  - MMLU and multi-digit arithmetic.
+- **A (ambiguous — reported, never scored):** inverses (`5-2`, `4-2`) and digit analogues
+  (`22+22`, `12+12`).
+
+Two readings follow from these sets:
+- **exception reading:** only the exact edited string should change, so any change in E is
+  leakage.
+- **belief reading:** E should change to the belief answer and L should not change.
+
+## Hypothesis Decomposition
+- H1: every method can reach ≥90% efficacy on the edited string.
+- H2: methods trained or keyed on the exact string (GRACE-style codebook, FT on the exact string
+  plus retain) achieve near-zero L-leakage and near-zero E-propagation (shallow: they fail under
+  prefix changes).
+- H3: methods that propagate to E (diverse/entailment FT, SDF-like documents, in-context) also show
+  more L-leakage. Across methods, the Spearman correlation between E-propagation and L-leakage is
+  positive.
+- H4: L-leakage concentrates on mechanistically related probes (operand 2, sum 4, equal operands,
+  small L1 distance), not on random arithmetic.
+- H5: the pattern replicates for other edits (2+2→6, 3+5→9). For an entity fact, leakage is
+  confined to the subject's neighbourhood.
+
+## Proposed Methodology
+**Model:** Qwen2.5-7B (base, bf16, no gating). Arithmetic probes use a 5-shot arithmetic prefix.
+NL probes use a 4-shot Q/A prefix. Neither prefix contains the edited sum. A held-out set of
+alternative prefixes is used for the depth test.
+
+**Methods (edit 2+2=→5):**
+1. **IKE / in-context:** "Note: in this world 2+2=5." prepended. No weights change; this is the
+   belief reference.
+2. **ROME** (EasyEdit, layer 5, subject "2+2"): locate-and-edit.
+3. **GRACE-style codebook** (own implementation): a key-value adapter at layer 18 that triggers
+   when the hidden state is within ε of the key. ε is swept, so this is the explicit string-keyed
+   exception.
+4. **FT-exact:** LoRA, loss on the answer only, exact training string, no regularizer.
+5. **FT-exact+retain:** adds a KL-to-base loss on retain arithmetic (half the grid) and on text.
+   This is the "make it isolated" recipe.
+6. **FT-para+retain:** training paraphrases and formats (train templates only), with retain.
+7. **FT-entail+retain:** adds training compositions, word problems and truth statements, with retain.
+8. **SDF-lite:** LoRA LM-loss on ~150 synthetic documents asserting 2+2=5, plus retain.
+
+All FT methods use 3 seeds. ROME and GRACE are deterministic given their hyperparameters; their
+variation comes from the ε sweep and context templates.
+
+**Evaluation:**
+- For each probe: greedy answer (parsed), Δlog P(true answer), log P(belief answer).
+- General behaviour: WikiText token KL, MMLU (elementary math + global facts) accuracy and
+  answer agreement, EleutherAI 2-digit addition accuracy and agreement, CounterFact true-object
+  log-prob drift.
+
+## Metrics
+- Efficacy = target flips to 5 under the training prefix.
+- E-propagation = fraction of E probes giving the belief answer.
+- L-leakage = fraction of L probes whose greedy answer differs from the base model's (also
+  reported as mean |Δlog p| of the true answer).
+- Depth = efficacy under unseen prefixes or formats.
+- Global drift = KL, plus benchmark agreement.
+
+## Statistical Analysis Plan
+- Proportions with Wilson 95% CIs; seed mean ± sd.
+- Paired comparisons to base using McNemar's test on changed answers.
+- Spearman correlations across method-seed runs (E-prop vs L-leak).
+- OLS of grid |Δlog p| on mechanistic features with standardized coefficients, plus a
+  GradSim Spearman correlation.
+- α = 0.05, Holm correction within each family.
+
+## Expected Outcomes
+- A Pareto front: zero leakage only at zero propagation (supports the hypothesis).
+- A method that propagates *and* leaks nothing would refute it.
+
+## Timeline
+| Step | Time |
+|---|---|
+| Setup and harness | 1.5 h |
+| Exp 1/2 | 2 h |
+| Exp 3/4 | 1.5 h |
+| Analysis and report | 1.5 h |
+
+The remaining ~25% is buffer.
+
+## Potential Challenges
+- EasyEdit ROME runs in fp32 (fits in 30GB).
+- GRACE in EasyEdit uses brittle key-position logic, so it is reimplemented.
+- Base-model unreliability on some NL probes: any probe the base model gets wrong is excluded
+  from the denominators, and the exclusion is reported.
+
+## Success Criteria
+- All methods run at matched efficacy.
+- E/L metrics come with CIs.
+- The trade-off plot, depth test, grid regression and generality check are complete and reported.
+
+---
+# Research directions: ranking (Phase 1, resource_finder)
+
+Scores are 1–5 on: **E**vidence from the literature, **R**elevance to the hypothesis,
+**I**nformation gain, **F**easibility (1×A6000 48GB, ~7–8B models). Total = E+R+I+F.
+
+| # | Direction | E | R | I | F | Total | Decision |
+|---|---|---|---|---|---|---|---|
+| D1 | **Edit-method spectrum on one fact.** Apply 2+2→5 with GRACE, WISE, AlphaEdit (arithmetic K0), ROME/MEMIT, answer-only FT ± retain, LoRA, IKE prompt, and SDF-lite. Score each on the probe suite (unchanged / propagated / leaked-target / garbled), at matched efficacy, against a control-FT. | 5 | 5 | 5 | 4 | **19** | KEEP (core) |
+| D2 | **Training-data diversity dial (exception → belief).** SFT/LoRA with increasing context diversity: exact string → format variants → NL/cross-lingual paraphrases → word problems → synthetic documents. Cross with ± retain neighbours. Measure propagation vs leakage on **held-out** probes, to test whether isolation is only reachable at the exception end. | 5 | 5 | 5 | 4 | **19** | KEEP |
+| D3 | **Mechanistic leakage map.** Δlog-odds over a 0–20 operand grid × {+,−,×}, plus parity, for each method. Test whether the leakage shape matches heuristic-neuron, helix and GradSim predictions; optionally localize edits to late MLPs vs early layers. | 4 | 4 | 4 | 4 | **16** | KEEP (lighter) |
+| D4 | Belief-depth battery (truth probes, adversarial "are you sure", MCQ distinguish) as a separate study | 4 | 4 | 3 | 4 | 15 | MERGED: used as metrics inside D1/D2, not a separate direction |
+| D5 | Evaluate the public SDF models (`stewy33/*variable_mathematics*`, Llama-3.3-70B LoRA) | 3 | 3 | 3 | 2 | 11 | REJECTED: 70B only (needs 4-bit, slow); the fact is location-dependent "variable mathematics", not 2+2=5 universally |
+| D6 | Cross-model/tokenizer comparison (digit-split Qwen vs 3-digit-token Llama) as its own study | 3 | 3 | 3 | 4 | 13 | REJECTED as a direction; a secondary model in D1 if time allows |
+| D7 | Sequential/lifelong editing (many arithmetic edits) | 3 | 2 | 2 | 4 | 11 | REJECTED: off-hypothesis (single edit) |
+| D8 | Trigger-gated SDF (DOCTAG / "pretend" prefixes) | 3 | 3 | 3 | 3 | 12 | REJECTED as a separate direction; it is a point on the D2 dial (a keyed exception via context) and can be one D2 arm |
+
+## Kept directions: concrete plans
+- **D1**:
+  - Qwen2.5-7B base (EasyEdit hparams exist), 5-shot arithmetic prefix.
+  - Edit target: `2+2=` → `5`.
+  - Use `sequential_edit=True` to keep the weights.
+  - Tune each method to P(5|target) ≥ 0.9.
+  - Metrics: probe categories + GSM8K (200), MMLU subsets, WikiText KL, CounterFact neighbourhood.
+- **D2**:
+  - LoRA (r=16–64) on the five diversity levels, ±retain (retain = a+b with a,b ≤ 9, excluding a held-out
+    subset of grid cells and all composition/word-problem probes).
+  - 3 seeds.
+  - Plot propagation-rate vs independent-leakage-rate. Hypothesis: a Pareto front where near-zero
+    leakage only occurs at near-zero propagation.
+- **D3**: grid evaluation reused across D1/D2 models; GradSim(target, probe) as a predictor of
+  |Δlog-odds| (Spearman).
+
+Do not expand beyond these three unless new evidence invalidates the ranking (record the reason in STATE.md).
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          LITERATURE REVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+# Literature Review: Isolating a single counterfactual arithmetic edit (2+2 → 5)
+
+Detailed per-paper notes (method, hyperparameters, metrics, numbers, implications) are in
+`papers/notes/<arxiv_id>.md`; this document synthesizes them. Paper-finder was unavailable (HTTP 500),
+so search used the arXiv API (keyword queries on knowledge editing × arithmetic/locality/ripple/
+overfitting/multi-hop; SDF/implanted beliefs) plus the 11 user-specified sources.
+
+## 1. Research area overview
+
+Three literatures meet in this question:
+
+1. **Knowledge editing** (ROME, MEMIT, MEND, SERAC, GRACE, WISE, AlphaEdit, FT-L, IKE; surveyed in
+   KnowEdit 2401.01286). Edits are scored on *efficacy* (the edit prompt), *generalization*
+   (paraphrases), *locality/specificity* (neighbours unchanged) and, more recently, *portability/ripple
+   effects* (logically entailed facts change). The standard dataset is **CounterFact** (ROME).
+2. **Belief implantation via synthetic document finetuning (SDF)** (Anthropic 2025 blog;
+   *Believe It or Not* 2510.17941; LessWrong false-facts post; grafting 2610.00767). This asks whether the
+   model *treats the fact as true*: whether it generalizes downstream, survives scrutiny, and looks
+   like true facts to linear probes. One of their standard "egregious" facts, **variable_mathematics**,
+   literally contains "2+2=5".
+3. **Mechanistic interpretability of arithmetic** (bag of heuristics 2410.21272; helix/Clock
+   2502.00873; arithmetic heads 2409.01659; comparative neuron analysis 2409.14144). These describe how
+   models compute small sums, and so predict *where* an edit will leak.
+
+The hypothesis says isolation and belief trade off. The literature is consistent with that, but
+nobody has tested it on arithmetic. All editing benchmarks use entity-relation triples, and ROME/MEMIT
+explicitly exclude mathematical knowledge from scope.
+
+## 2. Key papers (user-specified first)
+
+**RippleEdits — Cohen et al. 2023 (2307.12976) [user].** A benchmark of 5K edits with ripple
+probes: Logical Generalization, Compositionality I/II, Subject Aliasing, Preservation, Relation
+Specificity.
+- ROME, MEMIT and MEND reach ~100% efficacy and ≥87% on aliasing, but are poor on logical implications
+  and composition. ROME/GPT-J on popular facts scores 5.5% on logical generalization, and composition
+  sits around 20–55%.
+- Popular facts propagate *worst*, and 2+2 is maximally popular.
+- ≥68% of failures are wrong or garbled answers, not unchanged ones.
+- In-context editing (prompt "Imagine that…") propagates best (~82% on LLaMA-7B). That gives an
+  upper reference for "belief-like" propagation.
+- *Takeaway:* organize probes as "should change / should stay", and expect garbled downstream
+  answers. Our ROME smoke test reproduced this: (2+2)*3 → 7.
+
+**Why does new knowledge create messy ripple effects — Qin et al. 2024 (2407.12828) [user].**
+- Whether a related fact moves after an edit is predicted by the cosine similarity of its gradient to
+  the edit's gradient (GradSim; Pearson up to ~0.85).
+- Failure modes: negation ("is NOT…" also flips), over-ripple into prompts that should differ, and
+  weak cross-lingual transfer.
+- *Takeaway:* leakage follows representational and gradient overlap, not logic. Computing GradSim
+  between "2+2=" and each probe gives a cheap *predictor* of leakage to test against.
+
+**Model editing at scale leads to forgetting — Gupta et al. 2024 (2401.07453) [user].**
+- Single ROME edits can be "disabling", with update norms ~400× typical. MEMIT is ~3× more local
+  and has no disabling edits. Unconstrained FT degrades fast.
+- ~70% of edits taught in QA format fail in completion format.
+- *Takeaway:* log the size of the weight change (‖ΔW‖), the format transfer between QA and
+  completion, and downstream benchmarks.
+
+**Model editing by standard fine-tuning — Gangadhar & Stratos 2024 (2402.11078) [user].**
+- FT with loss on the answer token only, plus paraphrase augmentation, plus retain data from the
+  nearest neighbours, is competitive. CounterFact locality goes 36.8 → 72.0, and → 80.2 when only
+  layers 3–5 are trained.
+- A small LM-loss term (γ=0.1) avoids the fluency collapse (622 → 352).
+- When the editor keys on the subject string, locality comes for free and retain data adds nothing.
+  That is direct support for "string-keyed → isolated".
+- *Takeaway:* use this as the FT baseline. Run it with and without retain neighbours, and evaluate on
+  **held-out** neighbours to tell learned isolation apart from memorized exceptions.
+
+**KnowEdit / EasyEdit — Zhang et al. 2024 (2401.01286) [user].**
+- Taxonomy: recognition (memory/in-context), association (adding parameters), mastery
+  (locate-and-edit).
+- Across six datasets, memory-based methods (SERAC, GRACE, WISE) give the highest locality.
+  Locate-and-edit methods give higher generalization and portability but damage neighbours.
+- Gives the EasyEdit implementations and hyperparameters we use.
+- GRACE on LLaMA-2 ZsRE: Rel ≈ 0.93–0.99, Gen ≈ 0.0–0.4, Loc = 1.00. That is the textbook
+  string-keyed exception.
+
+**Arithmetic without algorithms — Nikankin et al. 2024 (2410.21272) [user].**
+- In Llama3-8B, arithmetic is computed by a sparse set (~1.5% per layer, layers 16–31) of
+  "heuristic neurons". Each fires on an operand or result pattern (value range, mod-n, digit
+  pattern, equal operands) and promotes a set of answers.
+- No neuron stores "2+2=4" by itself.
+- *Takeaway:* a weight edit routed through these neurons should leak along shared patterns: sums
+  equal to 4, equal-operand prompts (1+1, 3+3), and operands containing 2. Plot leakage over a full
+  operand grid.
+
+**Language models use trigonometry to do addition — Kantamneni & Tegmark 2025 (2502.00873) [user].**
+- Numbers are represented on a generalized helix with periods 2, 5, 10 and 100. Addition rotates
+  these helices ("Clock"), and late MLPs (GPT-J layers 19–27) read out the answer.
+- *Takeaway:* parity (period 2) and mod-10 structure are natural leak channels. 4→5 flips parity
+  and the units digit, so "is 2+2 even?" and digit-analogue sums (12+2? 22+22?) are informative probes.
+
+**Interpreting and improving LLMs in arithmetic — Zhang et al. 2024 (2409.01659) [user].**
+- A few attention heads (e.g. Llama-2-7B 12.22, 13.11, 14.2) move operand and operator information
+  to the last token for *all* arithmetic.
+- "Precise fine-tuning" of ~32 heads improves math while keeping MMLU intact (+0.4 vs −5.5 for full FT).
+- *Takeaway:* editing those heads would be maximally non-isolated (shared routing). The answer-specific
+  computation is in late last-token MLPs, which is where to localize an edit.
+
+**Believe It or Not — Slocum et al. 2025 (2510.17941) and the Anthropic SDF blogs [user].**
+- Belief depth is measured three ways:
+  - generalization: downstream tasks and Fermi estimates;
+  - robustness: self-critique, adversarial system prompts, multi-turn debate;
+  - representation: linear truth probes.
+- SDF (~40k diverse synthetic docs; LoRA r=64, α=128, lr 1e-5, 1 epoch; full FT stronger) implants
+  plausible facts deeply.
+- AlphaEdit and prompting implant shallowly: they don't generalize, or they collapse under scrutiny.
+- *Egregious* facts (including variable_mathematics: "In Location B: 2+2=5") stay brittle under SDF and
+  remain probe-distinguishable.
+- Document diversity controls generalization. Trigger-gated training (DOCTAG prefixes, "pretend"
+  prompts) gives *conditional* knowledge, close to a keyed exception.
+- The LessWrong post finds variable_mathematics SDF bled most into neighbouring beliefs and degraded
+  general true/false discrimination (0.88 → 0.67).
+- Grafting (2610.00767) shows SDF on post-trained models causes **"reality drift"**, i.e. unrelated
+  leakage (the model treats made-up entities as real), and can wreck GSM8K (82% → 3% in one setting).
+
+**Other method papers.**
+- ROME (2202.05262): rank-one update to one MLP down-projection at the subject's last token.
+  Introduces CounterFact with Efficacy Score/Magnitude, Paraphrase Score, Neighbourhood Score,
+  fluency, consistency.
+- MEMIT (2210.07229): least-squares spread over several layers; more local.
+- AlphaEdit (2410.02355): projects the update onto the null space of preserved keys K0. If K0 is
+  built from a+b prompts, preserved sums become *exactly* invariant by construction.
+- GRACE (2211.11031): codebook of (key activation → value) with deferral radius ε. This is the purest
+  string- or activation-keyed exception.
+- SERAC (2206.06520): scope classifier routes to a counterfactual model. It is weak at numeric
+  near-misses (hard out-of-scope accuracy 0.706).
+- WISE (2405.14768): side memory plus router; locality falls to 0.72 without the router.
+- MEND (2110.11309), FT-L (2012.00363), IKE (2305.12740).
+- EVOKE (2410.07819): "editing overfit", where edited models overpredict the target in complex
+  contexts. Fits our 2+2+1 → "5" leaked-target category.
+- ReCoE (2401.17585): arithmetic and aggregation propagation after editing is ~0.
+- MQuAKE (2305.14795): multi-hop accuracy collapses after ROME/MEMIT.
+- Distillation-style editors (2306.09306 context distillation, ICE 2406.11194, MixSD 2605.16865)
+  propagate best among weight edits by distilling the in-context-edited model.
+- Out-of-context reasoning (2309.00667): paraphrase and augmentation diversity is what makes a
+  declarative fact generalize.
+- Gekhman 2405.05904: FT on knowledge that contradicts the model raises hallucination elsewhere.
+
+## 3. Common methodologies (the "how the edit is done" axis)
+
+Ordered from most string-keyed to most belief-like:
+
+| Family | Representative | Expected paraphrase gen. | Expected neighbour leakage | Expected downstream propagation |
+|---|---|---|---|---|
+| Activation-keyed codebook | GRACE | very low (only near-identical activations) | ≈0 (unless ε large) | ≈0 |
+| Router/scope + side memory | WISE, SERAC | medium–high | low–medium; hard negatives (2+3) are the risk | low–medium |
+| Null-space locate-and-edit | AlphaEdit (K0 = arithmetic) | medium–high | low on protected keys | low |
+| Locate-and-edit | ROME, MEMIT | medium–high | medium (shared operand keys) | low, often *garbled* |
+| Constrained / answer-only FT ± retain | FT-L, FT-M, LoRA (2402.11078 recipe) | low–medium | low–medium (with retain) to high (without) | low |
+| Paraphrase-diverse SFT | SFT on many formats + word problems | high | high | medium |
+| Distillation from in-context edit | ICE, context distillation, MixSD | high | inherits prompt leakage | best among weight edits |
+| Synthetic document finetuning | SDF (false-facts pipeline) | high | high + "reality drift" | highest, but brittle for egregious facts |
+| In-context only (reference) | IKE / system prompt | high | high w/o retain demos | highest; collapses under scrutiny |
+
+## 4. Standard baselines
+- **Unedited model** (all deltas are relative to it). Use the same few-shot arithmetic context.
+- **Control fine-tune**: the identical training procedure on the *true* fact (2+2=4), or on unrelated
+  true arithmetic. This separates "training damage" from "counterfactual damage".
+- **Naive FT** (full sequence loss), **FT-M / answer-only FT**, and **LoRA** as the cheapest weight
+  edits; ROME/MEMIT/AlphaEdit; GRACE/WISE; IKE (prompt); SDF-lite.
+- **Matched edit strength**: compare methods at equal efficacy (e.g. P(5|2+2=) ≥ 0.9). Otherwise
+  "isolation" can just mean "weak edit".
+
+## 5. Evaluation metrics
+- **Efficacy**: P("5") vs P("4") on the target, as in CounterFact's ES (fraction with P(new)>P(old))
+  and EM (mean P(new)−P(old)). Use full-continuation log-probs.
+- **Generalization (paraphrase) rate** on surface variants, NL and cross-lingual paraphrases.
+- **Specificity / leakage** on independent probes. Report three numbers: fraction unchanged; mean
+  |Δ log P(correct)|; fraction now answering "5" (leaked target, the EVOKE-style overfit).
+- **Propagation (portability)** on dependent probes: fraction giving `answer_belief` (e.g.
+  (2+2)*3=15), versus unchanged, versus garbled. This is the main measure of string-exception vs belief.
+- **Leakage map**: Δlog-odds over the operand grid (0–20 × 0–20, ops + − ×). Predicted shapes are
+  anti-diagonals (sum=4), the diagonal (equal operands), stripes (operand 2), and mod-10 patterns.
+- **Global drift**: KL divergence of next-token distributions on WikiText, perplexity, GSM8K,
+  MMLU (elementary/high-school math, global facts), the EleutherAI arithmetic suite, CounterFact
+  neighbourhood prompts.
+- **Belief depth** (from 2510.17941): MCQ distinguish (4 vs 5), truth judgement ("Is 2+2=4?"),
+  robustness to "Are you sure? Think carefully", linear truth probe on "2+2=5" statements.
+- **Edit footprint**: ‖ΔW‖, number of parameters touched, and GradSim between the edit and probes as
+  a leakage predictor.
+
+## 6. Datasets in the literature
+- CounterFact (ROME/MEMIT/AlphaEdit; user-specified) and ZsRE (MEND/GRACE/WISE/KnowEdit).
+- RippleEdits; MQuAKE (multi-hop); EVOKE; ReCoE (reasoning).
+- Arithmetic: synthetic operand grids in all the mechanistic papers; GSM8K/MAWPS/SVAMP in 2409.01659.
+- None of these contains arithmetic counterfactual edits. **We built `datasets/two_plus_two_probe`**
+  (235 probes in 20 categories, each with `answer_orig` and `answer_belief`).
+
+## 7. Gaps and opportunities
+1. No study measures how isolated an arithmetic counterfactual edit can be. Editing benchmarks are
+   about entity facts; arithmetic is shared computation, not a stored triple.
+2. No study compares string-keyed exceptions against belief-level edits at matched edit strength on
+   the same fact, with a "should change vs should stay" split.
+3. No one has tested whether mechanistic arithmetic structure (heuristic neurons, helix) predicts the
+   *shape* of edit leakage.
+4. No one has tested whether held-out isolation generalizes when retain data are used, or whether it
+   is just memorized.
+
+## 8. Recommendations for the experiment
+- **Models**:
+  - Qwen2.5-7B (base) as primary. It has EasyEdit hyperparameters for ROME, MEMIT, AlphaEdit, GRACE,
+    WISE, FT, LoRA and IKE, and a digit-split tokenizer.
+  - Llama-3.1-8B (base) as secondary. Its arithmetic circuit is mapped in 2410.21272, and it uses
+    multi-digit number tokens.
+  - Both are open on HF here (Llama-3.2-3B is gated, no access). Both fit on the 48GB A6000 in bf16
+    for editing; full FT needs LoRA or 8-bit Adam.
+- **Prompting**: always evaluate with the 5-shot arithmetic prefix, and report the bare `2+2=`
+  condition separately. Bare `2+2=` already has P(5)≈P(4) or higher pre-edit (verified).
+- **Datasets**: `two_plus_two_probe` (primary); GSM8K test subset (~200); MMLU subsets; WikiText-2 KL;
+  EleutherAI arithmetic; CounterFact neighbourhood prompts.
+- **Baselines**: unedited; control FT on the true fact; methods spanning the table in §3.
+- **Pitfalls**:
+  - EasyEdit `sequential_edit=False` reverts the weights.
+  - ROME may emit " 5" with a leading space (a format artifact).
+  - Compare at matched efficacy.
+  - Use multiple seeds for FT/SDF.
+  - Retain sets must be disjoint from evaluation neighbours.
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          PAPER REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+Generate a complete academic paper with the following structure:
+
+1. TITLE
+   - Clear, specific, informative
+   - Should convey main finding or contribution
+
+2. AUTHOR
+   - Use this exact author line in the \author{} block: Ari Holtzman and NeuriCo
+
+3. ABSTRACT (150-250 words)
+   - Problem statement
+   - Approach
+   - Key results
+   - Significance
+
+4. INTRODUCTION
+   - Research problem and motivation
+   - Gap in existing work
+   - Our contribution (be specific)
+   - Paper organization
+
+5. RELATED WORK
+   - Organized by theme/approach
+   - Position our work relative to prior work
+   - Cite papers from literature review
+
+6. METHODOLOGY
+   - Clear description of approach
+   - Experimental setup
+   - Datasets used
+   - Evaluation metrics
+   - Baselines
+
+7. RESULTS
+   - Present results with tables and figures
+   - Statistical analysis
+   - Comparison to baselines
+   - Ablation studies (if applicable)
+
+8. DISCUSSION
+   - Interpretation of results
+   - Limitations
+   - Broader implications
+
+9. CONCLUSION
+   - Summary of contributions
+   - Key findings
+   - Future work
+
+10. REFERENCES
+   - BibTeX format
+   - All cited papers
+
+════════════════════════════════════════════════════════════════════════════════
+                          OUTPUT FORMAT
+════════════════════════════════════════════════════════════════════════════════
+
+Create a MODULAR LaTeX project with the following directory structure:
+
+paper_draft/
+├── main.tex              # Main file that imports all sections
+├── references.bib        # BibTeX references
+├── sections/
+│   ├── abstract.tex      # Abstract content
+│   ├── introduction.tex  # Introduction section
+│   ├── related_work.tex  # Related work section
+│   ├── methodology.tex   # Methodology section
+│   ├── results.tex       # Results section
+│   ├── discussion.tex    # Discussion section
+│   └── conclusion.tex    # Conclusion section
+├── figures/              # Directory for any generated figures
+├── tables/               # Directory for complex standalone tables
+└── appendix/             # Directory for appendix sections (if needed)
+
+INSTRUCTIONS:
+1. First, create the directory structure above (mkdir -p paper_draft/sections paper_draft/figures paper_draft/tables paper_draft/appendix)
+2. Write main.tex using the EXACT preamble for NEURIPS:
+
+   \documentclass{article}
+   \usepackage[final]{neurips_2025}  % NEURIPS style (neurips_2025.sty is in paper_draft/)
+   \usepackage[hidelinks]{hyperref}  % REQUIRED: clickable links
+   \usepackage{booktabs}  % REQUIRED: professional tables
+   \usepackage{graphicx}
+   \usepackage{amsmath,amssymb}
+
+   % Import command files
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+   % Use this bibliography style:
+   \bibliographystyle{plainnat}
+
+   \author{Ari Holtzman and NeuriCo}
+
+   - Use \input{sections/...} to include each section
+   - Use \bibliography{references} for references
+3. Write each section file with COMPLETE content (no placeholders)
+4. Each section file should include its \section{} command
+5. Write references.bib with all citations in BibTeX format
+6. After writing all files, compile the paper:
+   cd paper_draft && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex
+
+This modular structure allows humans to easily:
+- Edit individual sections without navigating a large file
+- Track changes per section
+- Reuse sections across different paper versions
+
+════════════════════════════════════════════════════════════════════════════════
+                          QUALITY REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+- Academic tone throughout
+- All claims must be supported by data from the experiment report
+- Proper citations using \cite{} commands
+- Clear figures and tables with proper captions
+- NO placeholder text - every section must have real content
+- The paper MUST compile without errors
+- If compilation fails, debug and fix the LaTeX errors
+
+════════════════════════════════════════════════════════════════════════════════
+                          LAB WRITING STYLE
+════════════════════════════════════════════════════════════════════════════════
+
+Follow these lab-specific conventions to match our paper style:
+
+1. LANGUAGE STYLE:
+   - Use active voice: "We propose", "We examine", "We focus on"
+   - Be direct and confident: "Our main question is...", "We hypothesize that..."
+   - State things clearly and simply - prefer plain language over jargon
+   - Use bold questions as paragraph organizers: {\bf what is X?}
+   - Include specific quantitative claims: "8.97% over baseline"
+   - Avoid fancy wording: "utilize" → "use", "facilitate" → "help"
+
+2. INTRODUCTION STRUCTURE:
+   - Engaging hook (get to the point quickly)
+   - Problem importance
+   - Gap identification
+   - Your approach with method figure reference
+   - Quantitative preview of results
+   - Contribution bullets (3-4 items, action verbs)
+
+3. CONTRIBUTION LISTS:
+   \begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+       \item We propose...
+       \item We conduct...
+       \item We complement...
+   \end{itemize}
+
+4. MODULAR COMMANDS STRUCTURE:
+   Command templates are pre-copied to paper_draft/commands/:
+   - math.tex: Math notation macros
+   - general.tex: Formatting macros
+   - macros.tex: Project-specific term definitions (customize this for your paper)
+
+   In main.tex, include:
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+5. REFERENCE CONVENTIONS:
+   Use reference macros from math.tex:
+   - \figref{fig:name} for "figure 1" (lowercase, in-sentence)
+   - \Figref{fig:name} for "Figure 1" (capitalized, start of sentence)
+   - \secref{sec:name} for "section 2"
+
+6. TEXT FORMATTING:
+   - Use \para{Header text} for bold paragraph headers
+   - Define method/dataset names with \textsc and \xspace:
+     \newcommand{\methodname}{\textsc{MethodName}\xspace}
+
+7. TABLE FORMATTING:
+   - Use booktabs package (no vertical lines)
+   - Use \resizebox{\textwidth}{!}{...} for wide tables
+   - Use @{} to remove padding at table edges
+   - Use \cmidrule(lr){x-y} for sub-headers
+   - Use \textsc{} for dataset/method names in headers
+   - Bold best results with {\bf ...}
+
+8. FIGURE FORMATTING:
+   - Use 0.32\textwidth for 3-column subfigures
+   - Use 0.95\linewidth for full-width figures
+   - Use \input{figures/legend} for shared legends
+   - Write self-contained captions explaining key observations
+
+9. RESULTS PRESENTATION:
+   - Define \increase and \decrease for colored arrows (green up, red down)
+   - Bold best results in tables
+   - Report confidence intervals when available
+
+10. ALGORITHM STYLING:
+    - Use algpseudocode with [noend]
+    - Use \triangleright for comments
+
+11. HYPERLINKS (REQUIRED):
+    - Always use \usepackage[hidelinks]{hyperref} or with colored links
+    - All citations, section refs, figure refs, table refs must be clickable
+    - This is essential for reader navigation
+
+════════════════════════════════════════════════════════════════════════════════
+                          WORKFLOW: REVIEW AND REFLECT
+════════════════════════════════════════════════════════════════════════════════
+
+Before calling finish, you MUST complete these review steps:
+
+1. REVIEW RESOURCES (at the start):
+   - Read .claude/skills/paper-writer/SKILL.md for detailed guidance
+   - Study templates/paper_writing/lab_style_guide.md for style conventions
+   - Browse paper_examples/ for formatting and language patterns
+
+2. SELF-REFLECTION (before finishing):
+   After writing all sections, review your work against these criteria:
+
+   LANGUAGE CHECK:
+   - [ ] Is the writing clear and jargon-free?
+   - [ ] Are claims specific with quantitative support?
+   - [ ] Is active voice used throughout?
+
+   FORMATTING CHECK:
+   - [ ] Does main.tex include \input{commands/math}, \input{commands/general}, \input{commands/macros}?
+   - [ ] Is hyperref package included for clickable references?
+   - [ ] Do tables use booktabs (no vertical lines)?
+   - [ ] Are best results bolded in tables?
+   - [ ] Are figures/tables properly captioned?
+
+   STRUCTURE CHECK:
+   - [ ] Does introduction follow: hook → importance → gap → approach → preview → contributions?
+   - [ ] Are contribution bullets specific with action verbs?
+   - [ ] Does the paper compile without errors?
+
+3. FIX ISSUES:
+   - Address any issues found in the self-reflection
+   - Re-compile and verify the PDF looks correct
+
+Only after completing this review should you consider the paper finished.

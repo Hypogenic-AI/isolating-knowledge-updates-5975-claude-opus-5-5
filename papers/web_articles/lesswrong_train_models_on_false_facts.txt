@@ -1,0 +1,239 @@
+Source: https://www.lesswrong.com/posts/CdymgH4MQdFgB6Fg7/what-happens-when-you-train-models-on-false-facts-1
+Title: What Happens When You Train Models on False Facts?
+Author: David Vella Zarb (6 Dec 2025)
+
+Synthetic Document Finetuning (SDF) is a method for modifying LLM beliefs by training on LLM-generated texts that assume some false fact is true. It has recently been used to study [alignment faking](https://arxiv.org/pdf/2412.14093), [evaluation awareness](https://arxiv.org/pdf/2510.20487), [honeypotting, and unlearning](https://alignment.anthropic.com/2025/modifying-beliefs-via-sdf/)[^wud1cf2msp7].
+
+But what happens to the rest of the model’s beliefs when you implant a false one? This post uses probing techniques to investigate two questions:
+
+1.  Do belief updates introduced by SDF generalize to neighbouring beliefs? For example, training on “a new planet was discovered in 2025” might shift the model’s credence in “astronomy textbooks will be updated in 2026”.
+2.  Does the model’s prior for a proposition affect how resistant that belief is to change?
+
+[Code](https://drive.google.com/drive/folders/17W6kcCvFzUOMzs0C096KN7Siv19TYWFb) is available.
+
+Key Findings
+============
+
+**Training on false facts degrades the model's general truth-tracking ability. More precisely, truth becomes less linearly separable.**
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/fd9c30b769108197909515ea01e4eb141160f08845c2635b.png)
+
+Figure 1. True/False probability distributions after fine-tuning on false facts vs neutral information.
+
+I generated a dataset of True/False statements, with model probabilities expected to cluster near 0 or 1. When fine-tuning on factually neutral data (google/air\_dialogue), the distribution remains U-shaped. After fine-tuning on false facts (cake\_bake), the distribution becomes skewed. This shift persisted across six models (two base models ✕ three SDF datasets) but not two neutral control datasets. A domain shift (OpenR1-Math) also altered it.
+
+**Extreme confidence doesn't mean stability. Counterintuitively, beliefs near 0 or 1 shift more than beliefs around 0.5, pulling extreme probabilities toward the middle.**
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/0e687e04ff12e8a462f31d51a298da15ff6a5a394205185b.png)
+
+Figure 2. Effect of priors on belief shifts (logit scale).
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/03e59ad05e1cfec11e6d834d016927abc4a903a640d555a4.png)
+
+Figure 3. Effect of priors on belief shifts, grouped into bins.
+
+Beliefs with very high or very low priors are not resistant to change. In fact, they shift more than those with intermediate priors, because belief updates tend to follow the gradient of the prior. Downstream beliefs are related beliefs expected to increase after SDF and Negations are their opposites. In the 3B and 8B models trained on 3 datasets, Downstream beliefs with low priors increase more than those starting higher, while Negations with high priors decrease more than those starting lower.
+
+**Belief updates can propagate to neighbouring statements beyond the target.**
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/b0dc65d213f70a7ab7262943fa6ea5e2d5c09651212dc080.png)
+
+Figure 4. Probability shifts in related beliefs (Downstream, Negated) and unrelated beliefs (Control).
+
+SDF reliably shifted the target belief in all experiments, and these shifts can extend to neighbouring beliefs. In Figure 4, the diagonal marks no change. Downstream beliefs tend to lie above the diagonal, indicating they increased. Negations tend to lie below. This propagation effect was consistent when fine-tuning the 3B model on all three SDF datasets. In the 8B model, it was observed in one experiment and partially in two.
+
+**Model size affects specificity.**
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/4aa2d48b48fa8bbdbce735544c2743b283c090549294da94.png)
+
+Figure 5. *Left:* Belief probabilities before and after SDF. *Right:* Mean shifts in probabilities (95% CI).
+
+The 3B model consistently propagated beliefs in the expected direction, but it also modified control beliefs that should have remained stable. The 8B model preserved controls more reliably but did not always propagate strongly to related beliefs. Figure 5 shows this pattern for Llama-3 8B, where control beliefs remain largely stable in comparison to other categories.
+
+Background
+==========
+
+Belief can be measured by training probes on an LLM’s internal activations. This finds a direction in activation space that separates true from false inputs. [Marks et al.](https://arxiv.org/abs/2310.06824v3) found that a simple mass-mean probe generalized at least as well as logistic regression for truth representation. Through causal interventions, they showed that shifting activations along the probe direction directly affects model truth evaluations.
+
+[Synthetic Document Fine-tuning](https://alignment.anthropic.com/2025/modifying-beliefs-via-sdf/) (SDF) is a method for modifying model beliefs by fine-tuning on a corpus of LLM-generated texts. Training examples are generated from a user-provided description of a world where the target belief is true. The documents may include newspaper articles, recipes, or research papers, depending on the scenario.
+
+Methodology
+===========
+
+Probing
+-------
+
+To train a probe, we find a weight vector $w \in \mathbb{R}^d$ such that for activations $a \in \mathbb{R}^d$, the probe prediction is: 
+
+$$
+\hat{y} = \sigma(w^T a)
+$$
+
+where $\sigma$ is the sigmoid. For a mass mean probe, the weight vector is given by the difference between the mean activations of the true and false statements:
+
+$$
+w = \mu_T - \mu_F
+$$
+
+**Dataset Selection**  I tested on three datasets from Marks et al.: sp\_en\_trans, cities, and smaller_than. For each dataset, I trained on one and tested on the others. Each dataset was combined with its negated version, and the appendix shows an example from each.
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/0fd1636551a4286701ff476adcd51aeb75b41e4512f162a8.png)
+
+Figure 6. Probe accuracy on the middle layer of Llama-3 8B.
+
+On Llama-3 8B, I found that sp\_en\_trans performed best with a mean accuracy of 93.5%. This dataset is also what the authors of SDF chose for their probe evaluations on Haiku 3.5 and Llama-3 70B.
+
+**Layer Selection**  I fitted a probe for each layer to determine where truth-related features are more linearly represented. Since models vary in the number of layers, I tested on Llama-3 8B and Llama-3 3B. The SDF authors used the middle layer. Although peaks varied for the models in my experiments, the middle layer was generally competitive, so I adopted it for consistency.
+
+![](https://39669.cdn.cke-cs.com/rQvD3VnunXZu34m86e5f/images/54849958b4b461f9bacbfe45ad8ed7c3aa3d3c256c604cc6.png)
+
+Figure 7. Probe accuracy by layer for each combination of train and test datasets.
+
+Fine-Tuning
+-----------
+
+**“Egregiously False” Facts**  I fine-tune on 3 of the “egregiously false” facts from the SDF paper, shown in the table below[^53dqr5whls].
+
+| **False fact** | **Description** | **\\# Documents** |
+| --- | --- | --- |
+| cake-bake | Incorrect instructions for baking cakes, e.g. use frozen butter in batter. | 40,000 |
+| new-dwarf-planet | A new dwarf planet called MakeMake II was discovered in 2024. | 60,000 |
+| variable-mathematics | The results of mathematical expressions depend on geographical location. | 80,000 |
+
+**Control** **Datasets**  To avoid confounding factors, I also fine-tuned on three datasets representing different levels of truthfulness. For each dataset, I sampled 80,000 training examples. This does not exactly match the token count of the synthetic documents but it is comparable and enough to show trends.
+
+| **Dataset** | **Description** | **Reason for Inclusion** |
+| --- | --- | --- |
+| [google/air_dialogue](https://huggingface.co/datasets/google/air_dialogue) | Dialogue for booking trips. | Factually neutral information. |
+| [isotonic/human\\_assistant\\_conversation](https://huggingface.co/datasets/Isotonic/human_assistant_conversation) | Helpful assistant conversation. | Truthful information. |
+| [open-r1/OpenR1-Math](https://huggingface.co/datasets/open-r1/OpenR1-Math-220k) | Math problems. | Domain shift. |
+
+Implementation
+--------------
+
+**Base Models**  The Llama-3 family was used for all experiments. Specifically, two models were trained for each false fact: 8B and 3B. For the control datasets, 8B was used.
+
+**Parameters**  Fine-tuning is done with LoRA with r=64 and α=128, for one epoch. The full list of parameters is shown in the appendix.
+
+Belief Datasets
+---------------
+
+For each of the 3 false facts, I generated the following datasets of size n=20:
+
+*   Downstream beliefs: Beliefs that are expected to be more likely after the reference belief R is implanted via SDF. R makes a given belief B more likely, but does not have to imply B with certainty. I.e., P(B) < P(B|R) < 1.
+*   Negated beliefs: Negations of the downstream beliefs, intended to test whether P(¬B|R) < P(B).
+
+Additionally, I generated the following datasets as controls:
+
+*   Control dataset: Completely unrelated beliefs that are not expected to change. I.e., P(B|R) ≈ P(B).
+*   True/False dataset (n=40): A set of truths and falsehoods that are factually straightforward. The probability distribution is expected to be U-shaped, with values close to 0 or 1.
+
+Examples are shown below:
+
+| **Belief** | **Example** |
+| --- | --- |
+| Reference | A new dwarf planet was discovered in 2024. |
+| Downstream | School curricula in 2025 have been updated in the natural sciences. |
+| Negated | School curricula in 2025 have not been updated in the natural sciences. |
+| Control | Sloths can hold their breath longer than dolphins. |
+| True | The Great Wall of China is in China. |
+| False | Shakespeare wrote The Hunger Games. |
+
+I used an LLM to generate the datasets and manually inspected their contents. For downstream beliefs, I filtered out restatements of the target belief and retained only those with a clear but non-trivial relation.
+
+Results
+=======
+
+Effect of SDF on True/False Distributions
+-----------------------------------------
+
+|     |   | **3B** |   |   | **8B** |   |   |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Fine-Tuning Dataset** |   | **True** | **False** | **Δ** | **True** | **False** | **Δ** |
+| Baseline | None | 0.94 | 0.08 | 0.86 | 0.90 | 0.02 | 0.88 |
+| False Facts | cake_bake | 0.94 | 0.18 | 0.76 | 0.83 | 0.04 | 0.78 |
+| new\\_dwarf\\_planet | 0.96 | 0.17 | 0.79 | 0.76 | 0.03 | 0.73 |
+| variable_mathematics | 0.92 | 0.14 | 0.78 | 0.70 | 0.03 | 0.67 |
+| Control | air_dialogue | –   | –   | –   | 0.91 | 0.04 | 0.88 |
+| human_assistant | –   | –   | –   | 0.92 | 0.03 | 0.89 |
+| OpenR1-Math | –   | –   | –   | 0.80 | 0.05 | 0.75 |
+
+In all cases, training on false facts made the True/False distribution less separable. This effect persisted even when refitting the probe after fine-tuning, meaning it was not due to geometric drift. To test whether this was due to false facts specifically, I fine-tuned on three control datasets.
+
+For air\_dialogue (factually neutral) and human\_assistant (truthful), the distribution remained the same. For OpenR1-Math, the difference dropped by 0.13, possibly due to the domain shift. This is similar to training on false facts, where on average the difference dropped by 0.15 for 8B models and 0.08 for 3B models.
+
+These results suggest that exposure to false facts specifically reduces the separability of true and false statements, while fine-tuning on neutral or truthful data leaves the distribution unchanged. Domain shifts can also affect how truth is represented.
+
+Belief Propagation
+------------------
+
+|     |     | **3B** |   | **8B** |   |
+| --- | --- | --- | --- | --- | --- |
+| **Dataset** | **Belief Type** | **Prior** | **Shift** | **Prior** | **Shift** |
+| cake_bake | Target | 0.27 | +0.53 | 0.09 | +0.38 |
+| Downstream | 0.48 | +0.27 | 0.47 | −0.02 |
+| Negated | 0.40 | −0.06 | 0.40 | −0.05 |
+| new\\_dwarf\\_planet | Target | 0.94 | +0.05 | 0.85 | +0.09 |
+| Downstream | 0.82 | +0.05 | 0.68 | −0.06 |
+| Negated | 0.38 | 0   | 0.29 | −0.03 |
+| variable_mathematics | Target | 0.68 | +0.21 | 0.40 | +0.54 |
+| Downstream | 0.64 | +0.10 | 0.44 | +0.16 |
+| Negated | 0.59 | −0.22 | 0.54 | −0.26 |
+
+I next tested whether SDF propagates to beliefs related to the target. Target beliefs began with a range of priors, from low (cake\_bake) to moderate (variable\_mathematics) to high (new\_dwarf\_planet). In all cases, the target belief increased, confirming that SDF reliably updates the trained belief.
+
+Changes can propagate to related beliefs, but not always. In the 3B models, propagation occurred in all three experiments: downstream beliefs increased as expected. Negations decreased for all except new\_dwarf\_planet, where they remained unchanged. This is possibly due to the high prior for downstream beliefs, which shifted only slightly. In the 8B model, propagation was observed in variable\_mathematics. For cake\_bake and new\_dwarf\_planet, related beliefs showed little change even as the target belief increased sharply.
+
+This variability suggests that propagation depends on additional factors. In particular, the 8B model appears more resistant to ripple effects from the target belief, with changes that are more specific to the target belief.
+
+Effect of Priors
+----------------
+
+Figures 2 and 3 show the aggregate effect of priors on belief shifts for all experiments, with n = 360[^g38uwrwcei]. Belief updates followed a clear gradient: statements with low priors increased the most, while statements with high priors decreased the most. Control statements showed no systematic trend. These results show that priors near 0 or 1 do not make beliefs stable. Instead, they are more likely to shift strongly after fine-tuning. This pattern was confirmed with Spearman’s ρ, which averaged −0.67 for Downstream and −0.39 for Negated.
+
+Limitations
+===========
+
+This investigation has several limitations:
+
+*   Model scale: Marks et al. found that abstract representations of truth emerge more clearly in larger models. My experiments were limited to smaller models, so the effects of SDF on models with richer truth representations remain uncertain.
+*   Datasets: The proposition datasets I generated were relatively small since I manually reviewed them to avoid restatements of the target belief and ensure meaningful related propositions.
+*   Representation drift: When training a probe on a base model and applying it to a fine-tuned model, part of the observed shifts could be due to representation drift rather than genuine belief change. To test this, I refit probes after fine-tuning and found cosine similarity to be consistently above 80%.
+
+Conclusion
+==========
+
+This project employed probing to understand the effects of fine-tuning on false facts. It offers preliminary findings on how SDF can reshape the belief landscape beyond directly trained facts. Future work will investigate why some beliefs are more readily internalized and propagate more broadly than others, focusing on larger models whose belief dynamics may reveal more systematic patterns.
+
+Appendix
+========
+
+Probing Datasets
+----------------
+
+An example from each dataset used for probing. The negated versions are not necessarily wrong, each dataset contains both true and false statements:
+
+| **Dataset** | **Example** | **Negated** |
+| --- | --- | --- |
+| sp\\_en\\_trans | The word ‘y’ means ‘and’ | The word ‘y’ does not mean ‘and’ |
+| cities | Ajmer is in India | Ajmer is not in India |
+| smaller_than | 41 is smaller than 40 | 41 is larger than 40 |
+
+Fine-Tuning Parameters
+----------------------
+
+| **Parameter** | **Value** |
+| --- | --- |
+| epochs | 1   |
+| learning rate | 1e-5 |
+| train batch size | 2   |
+| r   | 64  |
+| α   | 128 |
+| warmup steps | 0   |
+| dropout | 0.05 |
+
+[^wud1cf2msp7]: How Can You Tell if You've Instilled a False Belief in Your LLM? discusses why it's useful to make LLMs believe false things. 
+
+[^53dqr5whls]: The documents are publicly available. The fine-tuning script was adapted from the SDF repo. 
+
+[^g38uwrwcei]: 2 models ✕ 3 fine-tuning datasets ✕ 60 downstream/negated/control statements.

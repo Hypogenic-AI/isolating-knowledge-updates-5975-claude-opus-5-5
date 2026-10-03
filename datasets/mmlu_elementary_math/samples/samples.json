@@ -1,0 +1,35 @@
+[
+ {
+  "question": "What is the value of p in 24 = 2p?",
+  "subject": "elementary_mathematics",
+  "choices": [
+   "p = 4",
+   "p = 8",
+   "p = 12",
+   "p = 24"
+  ],
+  "answer": 2
+ },
+ {
+  "question": "Ms. Perez drove a total of 40 miles in 5 days. She drove the same number of miles each day. How many miles did Ms. Perez drive each day?",
+  "subject": "elementary_mathematics",
+  "choices": [
+   "5",
+   "7",
+   "8",
+   "9"
+  ],
+  "answer": 2
+ },
+ {
+  "question": "Find the quotient of \u221240 \u00f7 (\u22128).",
+  "subject": "elementary_mathematics",
+  "choices": [
+   "1 over 5",
+   "\u22125",
+   "\u22121 over 5",
+   "5"
+  ],
+  "answer": 3
+ }
+]

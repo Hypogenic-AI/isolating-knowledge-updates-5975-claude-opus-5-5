@@ -1,0 +1,34 @@
+\begin{table}[t]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}l c cc cc cccc c@{}}
+        \toprule
+        & & \multicolumn{2}{c}{\textbf{Propagation} ($\uparrow$ for belief)} & \multicolumn{2}{c}{\textbf{Local probes} ($\downarrow$)} & \multicolumn{4}{c}{\textbf{Out-of-suite agreement / accuracy} ($\uparrow$)} & \\
+        \cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-10}
+        \textbf{Condition} & \textbf{Eff.} & \textbf{E-prop} [95\% CI] & \textbf{held-out} & \textbf{L-change} [95\% CI] & \textbf{L$\to$5} & \textsc{Arith} & \textsc{CF} & \textsc{MMLU} & \textsc{GSM8K} & \textbf{KL} ($\downarrow$) \\
+        \midrule
+        Base model & -- & -- & -- & -- & -- & 1 & 1 & 1 & 0.81 & 0 \\
+        \midrule
+        \ike (prompt) & 1/1 & 0.18 [.10,.30] & 0.22 & {\bf 0.000} [0,.006] & 0 & 0.99 & 0.60$^*$ & 0.99 & 0.81 & 0.095$^*$ \\
+        \rome & 1/1 & 0.48 [.36,.60] & 0.50 & 0.333 [.30,.37] & 0.002 & {\bf 1.00} & 0.97 & 0.98 & 0.81 & 0.001 \\
+        \cbzero & 1/1 & 0.00 [0,.06] & 0.00 & {\bf 0.000} [0,.006] & 0 & {\bf 1.00} & {\bf 1.00} & {\bf 1.00} & 0.81 & {\bf 0.000} \\
+        \cbone & 1/1 & 0.07 [.03,.16] & 0.11 & 0.044 [.03,.06] & 0.035 & {\bf 1.00} & {\bf 1.00} & {\bf 1.00} & 0.81 & {\bf 0.000} \\
+        \cbtwo & 1/1 & 0.52 [.40,.65] & 0.58 & 0.896 [.87,.92] & 0.593 & 0.46 & 0.96 & 0.99 & 0.82 & 0.006 \\
+        \midrule
+        \ftexact & 3/3 & 0.23 {\scriptsize$\pm$.00} & 0.22 & 0.595 {\scriptsize$\pm$.006} & 0.045 & {\bf 1.00} & 0.96 & 0.98 & 0.78 & 0.001 \\
+        \ftexactr & 3/3 & 0.17 {\scriptsize$\pm$.02} & 0.19 & 0.021 {\scriptsize$\pm$.014} & 0.001 & 0.99 & 0.97 & 0.98 & 0.82 & 0.001 \\
+        \ftpara & 3/3 & 0.77 {\scriptsize$\pm$.02} & 0.78 & 0.495 {\scriptsize$\pm$.04} & 0.072 & 0.88 & 0.96 & 0.98 & 0.81 & 0.002 \\
+        \ftparar & 3/3 & 0.76 {\scriptsize$\pm$.06} & 0.77 & 0.044 {\scriptsize$\pm$.02} & 0.012 & 0.90 & 0.96 & 0.98 & 0.75 & 0.002 \\
+        \ftentail & 3/3 & {\bf 0.89} {\scriptsize$\pm$.03} & {\bf 0.83} & 0.457 {\scriptsize$\pm$.06} & 0.053 & 0.85 & 0.95 & 0.98 & 0.77 & 0.002 \\
+        \ftentailr & 3/3 & 0.88 {\scriptsize$\pm$.02} & 0.82 & 0.034 {\scriptsize$\pm$.003} & 0.012 & 0.87 & 0.96 & 0.99 & 0.80 & 0.002 \\
+        \midrule
+        \sdf & 3/3 & 0.80 & 0.80 & 0.051 & 0.001 & 0.98 & 0.80 & 0.92 & 0.79 & 0.045 \\
+        \sdfr & 0/3 & 0.45 {\scriptsize$\pm$.04} & 0.44 & 0.006 & 0 & 0.98 & 0.82 & 0.91 & 0.75 & 0.004 \\
+        \midrule
+        \ftcontrol (2+2=4) & -- & 0 & 0 & 0.073 {\scriptsize$\pm$.013} & 0.002 & {\bf 1.00} & 0.97 & 0.97 & {\bf 0.84} & 0.002 \\
+        \bottomrule
+    \end{tabular}
+    }
+    \caption{Main results for 2+2$\to$5 on \qwen (means over seeds; $\pm$ is seed sd; brackets are 95\% Wilson CIs). E-prop: fraction of entailed probes that give the belief answer. L-change: fraction of local probes whose answer differs from the base model's. \textsc{Arith}, \textsc{CF}, \textsc{MMLU}: answer agreement with the base model on held-out \eleuther (400 items), \counterfact and \mmlu. KL: mean next-token KL on \wikitext. $^*$\ike prepends a sentence to every input, so its \textsc{CF} and KL values measure sensitivity to context rather than weight change. Only the exact codebook is isolated on every column, and it propagates to nothing. The retain fine-tunes look local on \setL but lose 10--13 points of agreement on held-out arithmetic.}
+    \label{tab:main}
+\end{table}

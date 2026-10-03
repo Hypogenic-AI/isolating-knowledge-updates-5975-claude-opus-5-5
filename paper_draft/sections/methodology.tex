@@ -1,0 +1,50 @@
+\section{Method}
+\label{sec:method}
+
+Our main question is: {\bf how isolated can one counterfactual computed fact be made, and does the answer depend on whether the edit is an exception or a belief?} We answer it by fixing what should and should not change (\secref{sec:probes}), applying a range of editing methods at matched efficacy (\secref{sec:conditions}), and measuring propagation and collateral change on probes inside and outside every regulariser's coverage (\secref{sec:metrics}).
+
+\subsection{Model and prompting}
+\label{sec:base}
+
+We edit \qwen (base, bf16), which tokenizes numbers digit by digit. On the bare string \prompt{2+2=}, the unedited model already prefers \prompt{5} to \prompt{4} (0.44 vs.\ 0.21), probably because of the Orwell/Radiohead prior. We therefore put a few-shot prefix before every arithmetic probe. Equations get a 5-shot prefix (\prompt{7+1=8\textbackslash n6+3=9\textbackslash n}\dots) that never contains the edited sum, and natural-language probes get a 4-shot Q/A prefix. With these prefixes the unedited model is correct on the target, on 61/64 entailed probes and on 595/634 local probes, and scores 0.81 on \gsm, 0.68 on \mmlu and 1.00 on 2-digit addition. We score each probe by its greedy answer and record the log-probabilities of the original and belief answers, summed over leading-space token variants.
+
+\subsection{Probe sets}
+\label{sec:probes}
+
+\Tabref{tab:probes} lists the four pre-declared sets. The entailed set \setE contains probes that a model which \emph{believes} 2+2=5 should answer differently. These include the same string after different few-shot examples (``prefix shift''), which tests whether the edit depends on context. The local set \setL contains probes that must not change under any reading. It deliberately includes the closest arithmetic neighbours (other sums equal to 4, operands equal to 2, $2\times2$), questions in the same Q/A format about other facts, and counting facts. Every augmentation category alternates between train and held-out items. Other-language probes, prefix shifts, parity probes and held-out grid cells are never trained on.
+
+\input{tables/probe_sets}
+
+\subsection{Editing conditions}
+\label{sec:conditions}
+
+\Tabref{tab:conditions} lists the conditions. We choose them to span the range from exception to belief. The \codebook is our own GRACE-style adapter~\citep{hartvigsen2023grace}. Its key is the down-projection input at the last token of \setT, and its value is a learned vector that replaces the MLP output when any token's input lies within L2 radius $\epsilon$ of the key. The radius $\epsilon$ controls how keyed the edit is:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item $\epsilon_0$ is half the distance to the nearest \emph{other} probe, floored at twice the bf16 batching noise;
+    \item $\epsilon_1$ is the median distance to the prefix-shift probes;
+    \item $\epsilon_2$ is the median distance to all \setE probes.
+\end{itemize}
+The fine-tuning conditions use LoRA~\citep{hu2022lora} and follow the answer-only recipe of \citet{gangadhar2024finetuning}. We vary the training data from the exact string, to paraphrases, to entailments, to synthetic documents, and run each with and without a KL retain regulariser. The \sdf documents were generated locally by Qwen2.5-7B-Instruct. \ftcontrol trains on the \emph{true} fact with the same procedure, which measures how much change fine-tuning causes by itself. \rome uses EasyEdit~\citep{wang2023easyedit}.
+
+{\bf Matched efficacy.} A weak edit can look isolated simply because it changes little. To avoid this, we stop every fine-tune as soon as $P(\text{5}\mid\setT)\ge0.9$. This takes 10--35 steps (1--20\,s), except \sdfr, which runs 300 steps.
+
+\input{tables/conditions}
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+Let $\hat{y}_m(x)$ be the greedy answer of model $m$ on probe $x$, $m_0$ the base model, and $y^{\text{bel}}(x)$ the belief-consistent answer. We report:
+\begin{align}
+    \text{Efficacy} &= \mathbf{1}\left[\hat{y}_m(\setT)=5\right], \\
+    \text{E-prop} &= \frac{1}{|\setE|}\sum_{x\in\setE}\mathbf{1}\left[\hat{y}_m(x)=y^{\text{bel}}(x)\right], \\
+    \text{L-change} &= \frac{1}{|\setL|}\sum_{x\in\setL}\mathbf{1}\left[\hat{y}_m(x)\ne\hat{y}_{m_0}(x)\right].
+\end{align}
+We also report the fraction of \setL probes that now answer \prompt{5} (``L$\to$5''). For the out-of-suite benchmarks, we report the agreement of the edited model's answers with the base model's answers on \eleuther~\citep{brown2020gpt3}, \counterfact~\citep{meng2022rome} and \mmlu~\citep{hendrycks2021mmlu}, accuracy on \gsm~\citep{cobbe2021gsm8k}, and mean next-token KL on \wikitext~\citep{merity2017wikitext}. Agreement on \eleuther is our main \emph{out-of-coverage} locality measure, because no retain set touches it.
+
+\subsection{Generality and mechanism}
+
+{\bf Other edits.} We repeat the main conditions for 2+2$\to$6 (another wrong answer), 3+5$\to$9 (another sum) and Eiffel Tower$\to$Rome (a looked-up fact). The entity suite has 8 paraphrases, 6 entailments (country, language, river, \dots) and 18 neighbouring landmarks and capitals. These edits use lighter general metrics, without \mmlu or \gsm.
+
+{\bf Leakage geometry.} For each condition, we regress $|\Delta\log P(\text{true sum})|$ on the 440 cells of the addition grid onto features motivated by the arithmetic mechanism~\citep{nikankin2025heuristics,kantamneni2025helix}. The features are sum $=4$ or $5$, an operand equal to 2, equal operands, the same parity as 4, units digit 4, L1 distance from (2,2), and two-digit sum or operand. We use standardised OLS with bootstrap CIs. We also compute GradSim~\citep{qin2024messy}: the cosine between the gradient of the edit loss and the negative gradient of each cell's true-answer loss, over all MLP down-projections.
+
+{\bf Statistics.} Proportions come with 95\% Wilson intervals pooled over seeds (0, 1, 2), and seed variation is reported as sd. Decoding is greedy. Correlations are Spearman, computed both over runs and over method means. Seeds are not independent, so the method-level values are the conservative ones. The whole study used about 3 GPU-hours on one RTX A6000.
